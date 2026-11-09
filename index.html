@@ -180,7 +180,13 @@
       <button id="ve-mute" class="pill">🔊 소리 켜짐</button>
       <label class="slider">볼륨 <input id="ve-vol" type="range" min="0" max="200" value="100"></label>
     </div>
-    <div id="ve-progress" class="progress" hidden><span>영상을 만드는 중이에요…</span><progress max="1" value="0"></progress></div>
+    <div id="ve-progress" class="ve-progress" hidden role="status" aria-live="polite">
+      <p class="ve-p-title">영상을 저장하는 중이에요</p>
+      <p id="ve-pct" class="ve-pct">0%</p>
+      <progress max="1" value="0"></progress>
+      <p id="ve-left" class="ve-left"></p>
+      <p class="ve-left">끝나면 자동으로 다음으로 넘어가요 · 화면을 끄지 말아 주세요</p>
+    </div>
   </div>
 </section>
 

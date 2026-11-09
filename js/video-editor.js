@@ -167,12 +167,14 @@ $('ve-done').onclick = async () => {
   if (busy) return;
   const { start, end, dur, muted, vol, blob } = st;
   const untouched = start === 0 && end >= dur - 0.05 && !muted && vol === 100;
-  if (!canRecordCanvas()) {
-    if (untouched && dur <= MAX + 0.5) return finish({ type: 'video', blob, thumb: await frameThumb(0) });
-    return toast('이 브라우저에서는 영상 편집을 할 수 없어요');
-  }
+  // 자르거나 소리를 바꾸지 않았으면 다시 만들지 않고 바로 등록 (기다림 없음)
+  // shortcut: 원본 그대로라 화질 좋은 대신 용량이 큼, 저장 공간이 부족해지면 여기서도 줄이기
+  if (untouched && dur <= MAX + 0.5) return finish({ type: 'video', blob, thumb: await frameThumb(0) });
+  if (!canRecordCanvas()) return toast('이 브라우저에서는 영상 자르기를 할 수 없어요');
   busy = true;
+  showProgress(0, end - start);
   $('ve-progress').hidden = false;
+  $('videdit').classList.add('encoding');
   try {
     finish(await reencode());
   } catch (err) {
@@ -181,8 +183,15 @@ $('ve-done').onclick = async () => {
   } finally {
     busy = false;
     $('ve-progress').hidden = true;
+    $('videdit').classList.remove('encoding');
   }
 };
+// 진행 막대 + 퍼센트 + 남은 시간 (자른 구간 길이만큼 실시간으로 만들어서 걸리는 시간이 정해져 있음)
+function showProgress(p, total) {
+  $('ve-progress').querySelector('progress').value = p;
+  $('ve-pct').textContent = Math.floor(p * 100) + '%';
+  $('ve-left').textContent = `약 ${Math.max(1, Math.ceil(total * (1 - p)))}초 남았어요`;
+}
 
 async function frameThumb(t) {
   v.currentTime = t;
@@ -214,11 +223,10 @@ async function reencode() {
   const stopped = once(rec, 'stop');
   rec.start(500);
   await v.play();
-  const bar = $('ve-progress').querySelector('progress');
   await new Promise(resolve => {
     const tick = () => {
       ctx.drawImage(v, 0, 0, c.width, c.height);
-      bar.value = (v.currentTime - start) / (end - start);
+      showProgress(Math.min(1, (v.currentTime - start) / (end - start)), end - start);
       if (v.currentTime >= end || v.ended) return resolve();
       requestAnimationFrame(tick);
     };

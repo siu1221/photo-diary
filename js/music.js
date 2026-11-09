@@ -17,17 +17,38 @@ export function unlockAudio() {
     gain = ctx.createGain();
     ctx.createMediaElementSource(audio).connect(gain).connect(ctx.destination);
   }
-  if (audio.paused) { audio.src = SILENT; audio.play().catch(() => {}); }
+  if (audio.paused && !want) { audio.src = SILENT; audio.play().catch(() => {}); }
 }
+let want = false; // 사용자가 노래를 틀어 둔 상태인지 (아이폰이 몰래 끊었을 때 되살리는 기준)
 export function playSong(url, vol, loop = false) {
   unlockAudio();
+  want = true;
   gain.gain.value = vol / 100;
   audio.loop = loop;
   audio.src = url;
   audio.play().catch(() => {});
 }
 export function setVolume(v) { if (gain) gain.gain.value = v / 100; }
-export const stopSong = () => audio.pause();
+export const stopSong = () => { want = false; holds = 0; audio.pause(); };
+
+// 녹음·영상을 트는 동안 잠시 멈췄다가(hold) 끝나면 이어서(release)
+let holds = 0, resumeAfter = false;
+export function hold() {
+  if (holds++ === 0) { resumeAfter = want && !audio.paused; audio.pause(); }
+}
+export function release() {
+  if (holds === 0) return;
+  if (--holds === 0 && resumeAfter && want) { audioCtx(); audio.play().catch(() => {}); }
+}
+// 아이폰은 다른 소리(영상·전화·알림·화면 잠금)가 끼어들면 노래를 몰래 멈춤 → 다음 터치나 앱 복귀 때 이어서 재생
+const revive = () => {
+  if (!want || holds) return;
+  audioCtx();
+  if (audio.paused) audio.play().catch(() => {});
+};
+document.addEventListener('pointerdown', e => { if (!e.target.closest('.play')) revive(); }, true);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) revive(); });
+audio.addEventListener('ended', () => { if (!audio.loop) want = false; });
 
 // 화면의 ▶/❚❚ 버튼을 실제 재생 상태에 맞추기
 const sync = () => {
@@ -41,7 +62,7 @@ function playBtn(url, getVol, loop) {
   const b = el('button', { className: 'play', textContent: '▶', 'aria-label': '미리듣기', 'data-url': url });
   b.onclick = e => {
     e.stopPropagation();
-    if (audio.src === url && !audio.paused) return audio.pause();
+    if (audio.src === url && !audio.paused) { want = false; return audio.pause(); }
     playSong(url, getVol(), loop);
   };
   return b;
@@ -67,7 +88,7 @@ export function songCard(s, onRemove, onChange) {
     row.append(b);
   }
   if (onRemove) {
-    row.append(el('button', { className: 'x', textContent: '✕', 'aria-label': '노래 빼기', onclick: () => { audio.pause(); onRemove(); } }));
+    row.append(el('button', { className: 'x', textContent: '✕', 'aria-label': '노래 빼기', onclick: () => { stopSong(); onRemove(); } }));
     if (s.kind === 'itunes') {
       box.append(el('label', { className: 'slider song-vol' }, '🔈 소리',
         el('input', { type: 'range', min: 0, max: 100, value: vol(), 'aria-label': '노래 소리 크기', oninput: e => {
@@ -90,12 +111,14 @@ export function pickSong() {
     $('yt-url').value = '';
     $('song-vol').value = lastVol();
     $('songs').showModal();
-    $('songs').addEventListener('close', () => { audio.pause(); done?.(null); done = null; }, { once: true });
+    // 창 닫힘 알림은 조금 늦게 와서, 그사이 튼 노래를 끄지 않도록 '고르지 않고 닫았을 때'만 처리
+    $('songs').addEventListener('close', () => { if (!done) return; stopSong(); done(null); done = null; }, { once: true });
   });
 }
 function choose(song) {
   const d = done;
   done = null;
+  stopSong(); // 미리듣기 끄기
   d({ ...song, vol: lastVol() });
   $('songs').close();
 }

@@ -29,6 +29,7 @@ export function editImage(blob) {
     done = res;
     st = blank();
     syncUI();
+    document.querySelector('#imgedit [data-tab="crop"]').click(); // 항상 자르기 탭(격자)부터
     openScreen('imgedit');
     requestAnimationFrame(layout);
   });
@@ -91,7 +92,33 @@ export function adjust(ctx, W, H, { b, c, s, w, gray, sepia, fade }) {
 }
 
 // 미리보기: 화면 크기에 맞춰 다시 그리기
-let queued = false;
+let queued = false, tab = 'crop';
+// 아이폰 사진 앱처럼 3×3 격자 (미리보기에만, 저장되는 사진엔 안 들어감)
+function drawGrid(c, dpr) {
+  const ctx = c.getContext('2d'), W = c.width, H = c.height;
+  ctx.save();
+  ctx.strokeStyle = '#ffffffb3';
+  ctx.lineWidth = dpr;
+  ctx.shadowColor = '#0006';
+  ctx.shadowBlur = 2 * dpr;
+  ctx.beginPath();
+  for (const f of [1 / 3, 2 / 3]) {
+    ctx.moveTo(W * f, 0); ctx.lineTo(W * f, H);
+    ctx.moveTo(0, H * f); ctx.lineTo(W, H * f);
+  }
+  ctx.stroke();
+  // 네 모서리 굵은 꺾쇠
+  ctx.lineWidth = 3 * dpr;
+  ctx.strokeStyle = '#fff';
+  const L = Math.min(W, H) * 0.08, o = 1.5 * dpr;
+  ctx.beginPath();
+  ctx.moveTo(o, L); ctx.lineTo(o, o); ctx.lineTo(L, o);
+  ctx.moveTo(W - L, o); ctx.lineTo(W - o, o); ctx.lineTo(W - o, L);
+  ctx.moveTo(W - o, H - L); ctx.lineTo(W - o, H - o); ctx.lineTo(W - L, H - o);
+  ctx.moveTo(L, H - o); ctx.lineTo(o, H - o); ctx.lineTo(o, H - L);
+  ctx.stroke();
+  ctx.restore();
+}
 function layout() {
   if (queued) return;
   queued = true;
@@ -102,6 +129,7 @@ function layout() {
     const cssW = Math.min(stage.clientWidth - 20, (stage.clientHeight - 20) * R);
     const dpr = Math.min(2, devicePixelRatio || 1);
     draw(cv, Math.max(50, Math.round(cssW * dpr)));
+    if (tab === 'crop') drawGrid(cv, dpr);
     cv.style.width = cssW + 'px';
   });
 }
@@ -129,6 +157,8 @@ $('ie-flip').onclick = () => { st.flip = !st.flip; layout(); };
 $('ie-reset').onclick = () => { st = blank(); syncUI(); layout(); };
 for (const t of document.querySelectorAll('#imgedit .tabs button')) {
   t.onclick = () => {
+    tab = t.dataset.tab;
+    layout();
     for (const x of document.querySelectorAll('#imgedit .tabs button')) x.classList.toggle('on', x === t);
     for (const p of document.querySelectorAll('#imgedit .ie-panel')) p.hidden = p.dataset.panel !== t.dataset.tab;
   };

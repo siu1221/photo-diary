@@ -4,7 +4,7 @@ import { renderCal } from './calendar.js';
 import { editImage } from './image-editor.js';
 import { editVideo } from './video-editor.js';
 import { recordVoice } from './recorder.js';
-import { pickSong, songCard, stopSong, playSong, lastVol } from './music.js';
+import { pickSong, songCard, stopSong, playSong, lastVol, hold, release } from './music.js';
 import { pickQuote, randomQuote } from './quotes.js';
 
 const MAX_MEDIA = 10;
@@ -46,7 +46,7 @@ function closeDay() {
 function renderAll() { renderMedia(); renderSong(); renderVoices(); renderPlans(); renderQuote(); }
 
 // --- 사진·영상 (인스타 게시물처럼 옆으로 넘기기)
-function renderMedia() {
+function renderMedia(focus = 0) { // focus: 다 그린 뒤 보여 줄 칸 (방금 올리거나 고친 사진)
   const track = $('media-track');
   if (!day.media.length) {
     track.replaceChildren(el('label', { className: 'media-empty' },
@@ -56,7 +56,7 @@ function renderMedia() {
   } else {
     track.replaceChildren(...day.media.map((m, i) => {
       const view = m.type === 'video'
-        ? el('video', { src: blobUrl(m.blob), poster: blobUrl(m.thumb), controls: true, playsInline: true, preload: 'metadata' })
+        ? songAware(el('video', { src: blobUrl(m.blob), poster: blobUrl(m.thumb), controls: true, playsInline: true, preload: 'metadata' }))
         : el('img', { src: blobUrl(m.blob), alt: `${i + 1}번째 사진` });
       const tools = el('div', { className: 'tools' });
       if (i > 0) tools.append(el('button', { textContent: '◀', 'aria-label': '앞으로 옮기기 (첫 번째가 달력 표지)', onclick: () => move(i) }));
@@ -67,7 +67,7 @@ function renderMedia() {
     }));
   }
   $('media-count').textContent = day.media.length ? `${day.media.length} / ${MAX_MEDIA}` : '';
-  $('media-track').scrollLeft = 0;
+  $('media-track').scrollLeft = focus * $('media-track').clientWidth;
   drawDots();
   drawArrows();
 }
@@ -76,7 +76,24 @@ function drawDots() {
   const at = Math.round(track.scrollLeft / (track.clientWidth || 1));
   $('media-dots').replaceChildren(...(n > 1 ? day.media.map((_, i) => el('i', { className: i === at ? 'on' : '' })) : []));
 }
-$('media-track').addEventListener('scroll', () => { drawDots(); drawArrows(); }, { passive: true });
+$('media-track').addEventListener('scroll', () => { drawDots(); drawArrows(); pauseHidden(); }, { passive: true });
+
+// 옆으로 넘기면 화면에서 벗어난 영상은 멈춤
+function pauseHidden() {
+  const t = $('media-track'), at = Math.round(t.scrollLeft / (t.clientWidth || 1));
+  [...t.children].forEach((item, i) => { const v = item.querySelector('video'); if (v && i !== at && !v.paused) v.pause(); });
+}
+// 영상·음성 메모를 트는 동안 배경 노래는 잠시 멈췄다가, 끝나면 이어서
+function songAware(media) {
+  let held = false;
+  media.addEventListener('play', () => { if (!held) { held = true; hold(); } });
+  const off = () => { if (held) { held = false; release(); } };
+  media.addEventListener('pause', off);
+  media.addEventListener('ended', off);
+  media.addEventListener('emptied', off);
+  return media;
+}
+songAware(player);
 
 // 여러 장일 때: 반투명 화살표 + PC에서는 마우스로 끌어서 넘기기 (폰은 손가락으로 밀면 넘어감)
 function drawArrows() {
@@ -100,30 +117,33 @@ $('media-next').onclick = () => slide(1);
   t.addEventListener('dragstart', e => e.preventDefault()); // 사진이 끌려 나가지 않게
 }
 
+const withHold = async fn => { hold(); try { return await fn(); } finally { release(); } };
+
 async function onPick(e) {
   const files = [...e.target.files];
   e.target.value = '';
   for (const f of files) {
     if (day.media.length >= MAX_MEDIA) { toast(`사진·영상은 하루에 ${MAX_MEDIA}개까지예요`); break; }
-    const item = f.type.startsWith('video/') ? await editVideo(f) : await editImage(f);
-    if (item) { day.media.push(item); touch(); renderMedia(); }
+    const item = f.type.startsWith('video/') ? await withHold(() => editVideo(f)) : await editImage(f);
+    if (item) { day.media.push(item); touch(); renderMedia(day.media.length - 1); }
   }
 }
 $('media-input').onchange = onPick;
 
 async function reEdit(i) {
   const m = day.media[i];
-  const item = m.type === 'video' ? await editVideo(m.blob) : await editImage(m.blob);
-  if (item) { day.media[i] = item; touch(); renderMedia(); }
+  const item = m.type === 'video' ? await withHold(() => editVideo(m.blob)) : await editImage(m.blob);
+  if (item) { day.media[i] = item; touch(); }
+  renderMedia(i);
 }
 function move(i) {
   [day.media[i - 1], day.media[i]] = [day.media[i], day.media[i - 1]];
-  touch(); renderMedia();
+  touch(); renderMedia(i - 1);
 }
 function removeMedia(i) {
   if (!confirm('이 사진(영상)을 뺄까요?')) return;
   day.media.splice(i, 1);
-  touch(); renderMedia();
+  touch(); renderMedia(Math.max(0, Math.min(i, day.media.length - 1)));
 }
 
 // --- 노래
@@ -145,7 +165,9 @@ function autoGrow() {
 }
 $('diary').addEventListener('input', () => { touch(); autoGrow(); });
 $('open-rec').onclick = async () => {
+  hold(); // 녹음하는 동안 노래 잠시 멈춤
   const v = await recordVoice();
+  release();
   if (v) { day.voices.push(v); touch(); renderVoices(); }
 };
 function renderVoices() {
