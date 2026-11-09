@@ -361,3 +361,17 @@ dialog::backdrop { background: #2a202466; backdrop-filter: blur(2px); }
 .ve-p-title { margin: 0; font: 1.1rem var(--ko); }
 .ve-pct { margin: 0; font: 600 3rem var(--en); color: var(--acc); }
 .ve-left { margin: 0; font-size: .85rem; color: #fffa; }
+
+/* 사진 여러 장 편집 */
+.ie-stage { position: relative; }
+.ie-thumbs { display: flex; gap: 8px; justify-content: safe center; padding: 4px 16px 0; max-width: 100%; }
+.ie-thumbs button { flex: none; width: 46px; height: 46px; border-radius: 10px; overflow: hidden; opacity: .5; border: 2px solid transparent; }
+.ie-thumbs button.on { opacity: 1; border-color: var(--acc); }
+.ie-thumbs img { width: 100%; height: 100%; object-fit: cover; }
+.slider output { min-width: 46px; text-align: right; font: 500 .85rem var(--en); color: var(--acc); }
+
+/* 사진 넘기기 부드럽게 */
+.media-item { contain: content; }
+.media-track { overscroll-behavior-x: contain; }
+.yt-quick { display: flex; gap: 8px; }
+.yt-quick .pill { flex: 1; }

@@ -13,27 +13,48 @@ const FILTERS = [
 const OUT_LONG = 1080; // 저장 사진 긴 변
 const blank = () => ({ ratio: 'orig', rot: 0, flip: false, zoom: 1, ox: 0, oy: 0, b: 0, c: 0, s: 0, w: 0, filter: 0 });
 
-let img, imgUrl, st, done;
+// 여러 장을 한 번에 편집: 옆으로 넘기며 각각 고치고, ✓ 한 번에 모두 등록
+// 사진마다 원본(orig)과 편집값(edit)을 같이 저장해서, 다시 편집해도 보정이 겹쳐 쌓이지 않음
+const ORIG_LONG = 2048; // 다시 편집용 원본 긴 변
+let photos = [], cur = 0, img, st, done;
 const cv = $('ie-canvas');
 
-export function editImage(blob) {
-  return new Promise(async res => {
-    imgUrl = URL.createObjectURL(blob);
-    img = new Image();
-    img.src = imgUrl;
-    try { await img.decode(); } catch {
-      URL.revokeObjectURL(imgUrl);
-      toast('이 사진은 열 수 없어요. 다른 사진을 골라 주세요.');
-      return res(null);
-    }
-    done = res;
-    st = blank();
-    syncUI();
-    document.querySelector('#imgedit [data-tab="crop"]').click(); // 항상 자르기 탭(격자)부터
-    openScreen('imgedit');
-    requestAnimationFrame(layout);
-  });
+// list: [{ src: 원본 Blob/File, edit?: 지난 편집값 }]
+export async function editImages(list) {
+  const loaded = [];
+  for (const { src, edit } of list) {
+    const url = URL.createObjectURL(src), im = new Image();
+    im.src = url;
+    try { await im.decode(); } catch { URL.revokeObjectURL(url); toast('열 수 없는 사진은 건너뛰었어요'); continue; }
+    loaded.push({ img: im, url, src, isFile: !edit, st: { ...blank(), ...edit } });
+  }
+  if (!loaded.length) return null;
+  photos = loaded;
+  document.querySelector('#imgedit [data-tab="crop"]').click(); // 항상 자르기 탭(격자)부터
+  openScreen('imgedit');
+  drawThumbs();
+  select(0);
+  return new Promise(res => { done = res; });
 }
+
+function select(i) {
+  cur = Math.max(0, Math.min(photos.length - 1, i));
+  ({ img, st } = photos[cur]);
+  $('ie-title').textContent = photos.length > 1 ? `사진 편집 ${cur + 1} / ${photos.length}` : '사진 편집';
+  $('ie-prev').hidden = cur === 0;
+  $('ie-next').hidden = cur === photos.length - 1;
+  [...$('ie-thumbs').children].forEach((b, k) => b.classList.toggle('on', k === cur));
+  $('ie-thumbs').children[cur]?.scrollIntoView({ inline: 'center', block: 'nearest' });
+  syncUI();
+  layout();
+}
+function drawThumbs() {
+  $('ie-thumbs').hidden = photos.length < 2;
+  $('ie-thumbs').replaceChildren(...photos.map((p, k) =>
+    el('button', { 'aria-label': `${k + 1}번째 사진`, onclick: () => select(k) }, el('img', { src: p.url, alt: '' }))));
+}
+$('ie-prev').onclick = () => select(cur - 1);
+$('ie-next').onclick = () => select(cur + 1);
 
 // 회전까지 반영한 사진 크기와 자르는 틀의 비율
 const dims = () => (st.rot % 180 ? [img.naturalHeight, img.naturalWidth] : [img.naturalWidth, img.naturalHeight]);
@@ -138,6 +159,7 @@ addEventListener('resize', () => { if ($('imgedit').classList.contains('active')
 function syncUI() {
   for (const b of $('ie-ratios').children) b.classList.toggle('on', b.dataset.ratio === st.ratio);
   for (const i of document.querySelectorAll('#imgedit [data-k]')) i.value = st[i.dataset.k];
+  showPct();
   $('ie-zoom').value = st.zoom;
   [...$('ie-filters').children].forEach((b, i) => b.classList.toggle('on', i === st.filter));
 }
@@ -151,10 +173,15 @@ $('ie-ratios').onclick = e => {
   syncUI(); layout();
 };
 $('ie-zoom').oninput = e => { st.zoom = +e.target.value; layout(); };
-for (const i of document.querySelectorAll('#imgedit [data-k]')) i.oninput = () => { st[i.dataset.k] = +i.value; layout(); };
+for (const i of document.querySelectorAll('#imgedit [data-k]')) i.oninput = () => { st[i.dataset.k] = +i.value; showPct(); layout(); };
+// 보정값을 숫자로 (+20%, -15%)
+function showPct() {
+  for (const o of document.querySelectorAll('#imgedit [data-o]')) { const v = st[o.dataset.o]; o.textContent = (v > 0 ? '+' : '') + v + '%'; }
+}
+$('ie-adj-reset').onclick = () => { Object.assign(st, { b: 0, c: 0, s: 0, w: 0 }); syncUI(); layout(); };
 $('ie-rotate').onclick = () => { Object.assign(st, { rot: (st.rot + 270) % 360, zoom: 1, ox: 0, oy: 0 }); syncUI(); layout(); };
 $('ie-flip').onclick = () => { st.flip = !st.flip; layout(); };
-$('ie-reset').onclick = () => { st = blank(); syncUI(); layout(); };
+$('ie-reset').onclick = () => { Object.assign(st, blank()); syncUI(); layout(); };
 for (const t of document.querySelectorAll('#imgedit .tabs button')) {
   t.onclick = () => {
     tab = t.dataset.tab;
@@ -167,7 +194,13 @@ for (const t of document.querySelectorAll('#imgedit .tabs button')) {
 // 한 손가락: 위치 이동 / 두 손가락: 확대·축소 / PC 마우스 휠: 확대·축소
 const ptrs = new Map();
 let pinch = 0;
-cv.addEventListener('pointerdown', e => { cv.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, [e.clientX, e.clientY]); pinch = 0; });
+let swipe = null; // 옆으로 밀어서 다음 사진: 손가락 하나, 사진이 더 움직일 수 없을 때만
+cv.addEventListener('pointerdown', e => {
+  cv.setPointerCapture(e.pointerId);
+  ptrs.set(e.pointerId, [e.clientX, e.clientY]);
+  pinch = 0;
+  swipe = ptrs.size === 1 ? { x: e.clientX, y: e.clientY, ox: st.ox } : null;
+});
 cv.addEventListener('pointermove', e => {
   const p = ptrs.get(e.pointerId);
   if (!p) return;
@@ -185,7 +218,14 @@ cv.addEventListener('pointermove', e => {
   }
   layout();
 });
-const up = e => { ptrs.delete(e.pointerId); pinch = 0; };
+const up = e => {
+  ptrs.delete(e.pointerId);
+  pinch = 0;
+  if (!swipe || ptrs.size) return;
+  const dx = e.clientX - swipe.x, dy = e.clientY - swipe.y, moved = Math.abs(st.ox - swipe.ox) * cv.clientWidth;
+  if (photos.length > 1 && Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5 && moved < 10) select(cur + (dx < 0 ? 1 : -1));
+  swipe = null;
+};
 cv.addEventListener('pointerup', up);
 cv.addEventListener('pointercancel', up);
 cv.addEventListener('wheel', e => {
@@ -197,13 +237,40 @@ cv.addEventListener('wheel', e => {
 
 function finish(result) {
   closeScreen('imgedit');
-  URL.revokeObjectURL(imgUrl);
+  for (const p of photos) URL.revokeObjectURL(p.url);
+  photos = [];
   done(result);
 }
-$('ie-cancel').onclick = () => finish(null);
-$('ie-done').onclick = async () => {
-  const R = frameRatio(), out = el('canvas');
-  draw(out, R >= 1 ? OUT_LONG : Math.round(OUT_LONG * R));
-  const blob = await canvasBlob(out, 'image/jpeg', 0.9);
-  finish({ type: 'image', blob, thumb: await thumbOf(out, out.width, out.height) });
+$('ie-cancel').onclick = () => {
+  if (photos.length > 1 && !confirm('편집을 그만두고 사진을 올리지 않을까요?')) return;
+  finish(null);
 };
+$('ie-done').onclick = async () => {
+  const btn = $('ie-done');
+  if (btn.disabled) return;
+  btn.disabled = true;
+  try {
+    const items = [];
+    for (let k = 0; k < photos.length; k++) {
+      if (photos.length > 1) toast(`등록하는 중… ${k + 1} / ${photos.length}`);
+      ({ img, st } = photos[k]);
+      clamp();
+      const R = frameRatio(), out = el('canvas');
+      draw(out, R >= 1 ? OUT_LONG : Math.round(OUT_LONG * R));
+      items.push({
+        type: 'image', blob: await canvasBlob(out, 'image/jpeg', 0.9), thumb: await thumbOf(out, out.width, out.height),
+        orig: photos[k].isFile ? await shrinkOrig(img) : photos[k].src, edit: { ...st },
+      });
+    }
+    finish(items);
+  } finally {
+    btn.disabled = false;
+  }
+};
+// 원본은 다시 편집할 때 쓰려고 2048px로 줄여서 보관
+function shrinkOrig(im) {
+  const s = Math.min(1, ORIG_LONG / Math.max(im.naturalWidth, im.naturalHeight));
+  const c = el('canvas', { width: Math.round(im.naturalWidth * s), height: Math.round(im.naturalHeight * s) });
+  c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+  return canvasBlob(c, 'image/jpeg', 0.92);
+}

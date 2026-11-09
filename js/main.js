@@ -1,4 +1,5 @@
-import { $, openScreen, closeScreen } from './util.js';
+import { $, openScreen, closeScreen, toast } from './util.js';
+import { migrateBlobs } from './db.js';
 import { renderCal } from './calendar.js';
 import { checkBanner } from './report.js';
 import './backup.js';
@@ -31,6 +32,8 @@ $('autoplay').onchange = e => save('autoplay', e.target.checked ? '1' : '0');
 $('open-menu').onclick = () => { drawSettings(); $('menu').showModal(); };
 drawSettings();
 
-renderCal();
+migrateBlobs().then(({ broken }) => {
+  if (broken) toast(`아이폰 저장 오류로 읽을 수 없게 된 사진·영상이 ${broken}개 있어요. 백업 파일이 있다면 불러와 주세요.`);
+}).catch(() => {}).finally(renderCal);
 checkBanner();
 if (location.protocol !== 'file:') navigator.serviceWorker?.register('sw.js');

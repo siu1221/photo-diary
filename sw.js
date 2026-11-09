@@ -1,5 +1,5 @@
 // 인터넷 먼저, 끊기면 저장해 둔 사본으로 (오프라인에서도 열리게)
-const CACHE = 'photo-diary-v5';
+const CACHE = 'photo-diary-v6';
 const FILES = ['./', 'index.html', 'style.css', 'manifest.json', 'icon-180.png', 'icon-512.png',
   ...['main', 'util', 'db', 'calendar', 'day', 'image-editor', 'video-editor', 'recorder', 'music', 'quotes', 'report', 'backup', 'memory', 'quotes-data'].map(n => `js/${n}.js`)];
 const FONT_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com'];

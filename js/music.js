@@ -131,7 +131,7 @@ $('song-form').onsubmit = async e => {
   const list = $('song-results');
   list.replaceChildren(el('li', { className: 'muted', textContent: '찾는 중…' }));
   try {
-    const r = await fetch(`https://itunes.apple.com/search?${new URLSearchParams({ term: q, media: 'music', entity: 'song', limit: '25' })}`);
+    const r = await fetch(`https://itunes.apple.com/search?${new URLSearchParams({ term: q, entity: 'song', limit: '25' }) /* media=music을 넣으면 아이폰에서 음악 앱으로 튕겨서 실패함 */}`);
     const { results } = await r.json();
     if (!results.length) return list.replaceChildren(el('li', { className: 'muted', textContent: '검색 결과가 없어요. 영어 제목으로도 찾아보세요.' }));
     list.replaceChildren(...results.map(t => {
@@ -148,6 +148,20 @@ $('song-form').onsubmit = async e => {
   } catch {
     list.replaceChildren(el('li', { className: 'muted', textContent: '인터넷 연결을 확인해 주세요.' }));
   }
+};
+
+// 유튜브에서 찾기: 아이폰에 유튜브 앱이 있으면 앱으로, 없으면 Safari로 열림
+$('yt-search').onclick = () => {
+  const q = $('song-q').value.trim();
+  open(q ? `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}` : 'https://www.youtube.com/', '_blank');
+};
+// 유튜브에서 '공유 → 링크 복사' 하고 돌아와서 한 번에 넣기
+$('yt-paste').onclick = async () => {
+  let text = '';
+  try { text = await navigator.clipboard.readText(); } catch { return toast('붙여넣기가 막혀 있어요. 아래 칸에 길게 눌러 붙여넣어 주세요'); }
+  if (!youtubeId(text)) return toast('복사한 내용이 유튜브 링크가 아니에요');
+  $('yt-url').value = text;
+  $('yt-form').requestSubmit();
 };
 
 export const youtubeId = url => (url.match(/(?:youtu\.be\/|[?&]v=|shorts\/|embed\/)([\w-]{11})/) || [])[1] || null;

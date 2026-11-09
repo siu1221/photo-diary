@@ -128,10 +128,15 @@
 <section id="imgedit" class="screen dark">
   <header class="topbar">
     <button id="ie-cancel" class="icon-btn" aria-label="취소"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-    <h2 class="title">사진 편집</h2>
-    <button id="ie-done" class="icon-btn check" aria-label="적용"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 12.5l5 5L19.5 7"/></svg></button>
+    <h2 id="ie-title" class="title">사진 편집</h2>
+    <button id="ie-done" class="icon-btn check" aria-label="모두 등록"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 12.5l5 5L19.5 7"/></svg></button>
   </header>
-  <div id="ie-stage" class="ie-stage"><canvas id="ie-canvas" aria-label="사진 미리보기. 끌어서 위치, 두 손가락으로 확대"></canvas></div>
+  <div id="ie-stage" class="ie-stage">
+    <canvas id="ie-canvas" aria-label="사진 미리보기. 끌어서 위치, 두 손가락으로 확대, 옆으로 밀어 다음 사진"></canvas>
+    <button id="ie-prev" class="media-arrow prev" aria-label="이전 사진" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4l-8 8 8 8"/></svg></button>
+    <button id="ie-next" class="media-arrow next" aria-label="다음 사진" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4l8 8-8 8"/></svg></button>
+  </div>
+  <div id="ie-thumbs" class="ie-thumbs scroll-x"></div>
   <div class="tabs" role="tablist">
     <button data-tab="crop" class="on" role="tab">자르기</button>
     <button data-tab="adjust" role="tab">보정</button>
@@ -147,10 +152,11 @@
     </div>
   </div>
   <div class="ie-panel" data-panel="adjust" hidden>
-    <label class="slider">밝기 <input data-k="b" type="range" min="-100" max="100" value="0"></label>
-    <label class="slider">대비 <input data-k="c" type="range" min="-100" max="100" value="0"></label>
-    <label class="slider">채도 <input data-k="s" type="range" min="-100" max="100" value="0"></label>
-    <label class="slider">따뜻함 <input data-k="w" type="range" min="-100" max="100" value="0"></label>
+    <label class="slider">밝기 <input data-k="b" type="range" min="-100" max="100" value="0"><output data-o="b">0%</output></label>
+    <label class="slider">대비 <input data-k="c" type="range" min="-100" max="100" value="0"><output data-o="c">0%</output></label>
+    <label class="slider">채도 <input data-k="s" type="range" min="-100" max="100" value="0"><output data-o="s">0%</output></label>
+    <label class="slider">따뜻함 <input data-k="w" type="range" min="-100" max="100" value="0"><output data-o="w">0%</output></label>
+    <div class="chips"><button id="ie-adj-reset">↺ 보정 초기화</button></div>
   </div>
   <div class="ie-panel" data-panel="filter" hidden>
     <div class="chips" id="ie-filters"></div>
@@ -248,8 +254,13 @@
     <button class="pill acc">검색</button>
   </form>
   <ul id="song-results" class="song-results"></ul>
+  <div class="yt-quick">
+    <button id="yt-search" type="button" class="pill">▶ 유튜브에서 찾기</button>
+    <button id="yt-paste" type="button" class="pill">📋 복사한 링크 넣기</button>
+  </div>
+  <p class="muted small" style="margin:0">유튜브에서 노래를 찾고 <b>공유 → 링크 복사</b>를 한 뒤, 돌아와서 <b>복사한 링크 넣기</b>를 눌러요.</p>
   <details class="yt">
-    <summary>유튜브 링크로 넣기</summary>
+    <summary>링크 직접 붙여넣기</summary>
     <form id="yt-form" class="yt-form">
       <input id="yt-url" inputmode="url" placeholder="https://youtu.be/..." aria-label="유튜브 링크" required>
       <button class="pill acc">넣기</button>

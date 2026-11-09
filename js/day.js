@@ -1,7 +1,7 @@
 import { $, el, DOW, parseKey, fmtSec, toast, openScreen, closeScreen } from './util.js';
 import { getDay, putDay, delDay, emptyDay, hasAny } from './db.js';
 import { renderCal } from './calendar.js';
-import { editImage } from './image-editor.js';
+import { editImages } from './image-editor.js';
 import { editVideo } from './video-editor.js';
 import { recordVoice } from './recorder.js';
 import { pickSong, songCard, stopSong, playSong, lastVol, hold, release } from './music.js';
@@ -57,7 +57,7 @@ function renderMedia(focus = 0) { // focus: 다 그린 뒤 보여 줄 칸 (방�
     track.replaceChildren(...day.media.map((m, i) => {
       const view = m.type === 'video'
         ? songAware(el('video', { src: blobUrl(m.blob), poster: blobUrl(m.thumb), controls: true, playsInline: true, preload: 'metadata' }))
-        : el('img', { src: blobUrl(m.blob), alt: `${i + 1}번째 사진` });
+        : el('img', { src: blobUrl(m.blob), alt: `${i + 1}번째 사진`, decoding: 'async' });
       const tools = el('div', { className: 'tools' });
       if (i > 0) tools.append(el('button', { textContent: '◀', 'aria-label': '앞으로 옮기기 (첫 번째가 달력 표지)', onclick: () => move(i) }));
       tools.append(
@@ -68,6 +68,7 @@ function renderMedia(focus = 0) { // focus: 다 그린 뒤 보여 줄 칸 (방�
   }
   $('media-count').textContent = day.media.length ? `${day.media.length} / ${MAX_MEDIA}` : '';
   $('media-track').scrollLeft = focus * $('media-track').clientWidth;
+  shown = focus;
   drawDots();
   drawArrows();
 }
@@ -76,7 +77,21 @@ function drawDots() {
   const at = Math.round(track.scrollLeft / (track.clientWidth || 1));
   $('media-dots').replaceChildren(...(n > 1 ? day.media.map((_, i) => el('i', { className: i === at ? 'on' : '' })) : []));
 }
-$('media-track').addEventListener('scroll', () => { drawDots(); drawArrows(); pauseHidden(); }, { passive: true });
+// 넘기는 동안은 아무것도 하지 않고, 보이는 칸이 바뀔 때만 점·화살표 갱신 (버벅임 방지)
+let shown = -1, ticking = false;
+$('media-track').addEventListener('scroll', () => {
+  if (ticking) return;
+  ticking = true;
+  requestAnimationFrame(() => {
+    ticking = false;
+    const t = $('media-track'), at = Math.round(t.scrollLeft / (t.clientWidth || 1));
+    if (at === shown) return;
+    shown = at;
+    [...$('media-dots').children].forEach((d, i) => d.classList.toggle('on', i === at));
+    drawArrows();
+    pauseHidden();
+  });
+}, { passive: true });
 
 // 옆으로 넘기면 화면에서 벗어난 영상은 멈춤
 function pauseHidden() {
@@ -122,9 +137,18 @@ const withHold = async fn => { hold(); try { return await fn(); } finally { rele
 async function onPick(e) {
   const files = [...e.target.files];
   e.target.value = '';
-  for (const f of files) {
-    if (day.media.length >= MAX_MEDIA) { toast(`사진·영상은 하루에 ${MAX_MEDIA}개까지예요`); break; }
-    const item = f.type.startsWith('video/') ? await withHold(() => editVideo(f)) : await editImage(f);
+  const room = MAX_MEDIA - day.media.length;
+  if (files.length > room) toast(`사진·영상은 하루에 ${MAX_MEDIA}개까지라 ${room}개만 올릴게요`);
+  const pick = files.slice(0, room);
+  // 사진은 한꺼번에 편집해서 한 번에 등록
+  const images = pick.filter(f => !f.type.startsWith('video/'));
+  if (images.length) {
+    const items = await editImages(images.map(src => ({ src })));
+    if (items) { day.media.push(...items); touch(); renderMedia(day.media.length - 1); }
+  }
+  // 영상은 하나씩 (구간 자르기)
+  for (const f of pick.filter(f => f.type.startsWith('video/'))) {
+    const item = await withHold(() => editVideo(f));
     if (item) { day.media.push(item); touch(); renderMedia(day.media.length - 1); }
   }
 }
@@ -132,7 +156,8 @@ $('media-input').onchange = onPick;
 
 async function reEdit(i) {
   const m = day.media[i];
-  const item = m.type === 'video' ? await withHold(() => editVideo(m.blob)) : await editImage(m.blob);
+  const item = m.type === 'video' ? await withHold(() => editVideo(m.blob))
+    : (await editImages([{ src: m.orig || m.blob, edit: m.orig && m.edit }]))?.[0];
   if (item) { day.media[i] = item; touch(); }
   renderMedia(i);
 }

@@ -16,7 +16,7 @@ $('export').onclick = async () => {
   toast('백업 파일을 만드는 중이에요…');
   const days = await getRange();
   for (const d of Object.values(days)) {
-    for (const m of d.media) { m.blob = await toDataURL(m.blob); m.thumb = await toDataURL(m.thumb); }
+    for (const m of d.media) { m.blob = await toDataURL(m.blob); m.thumb = await toDataURL(m.thumb); if (m.orig) m.orig = await toDataURL(m.orig); }
     for (const v of d.voices) v.blob = await toDataURL(v.blob);
   }
   const file = new Blob([JSON.stringify({ app: 'photo-diary', version: 2, days, myQuotes: (await getMeta('myQuotes')) || [] })], { type: 'application/json' });
@@ -33,6 +33,12 @@ const dataUrl = (v, kinds) => typeof v === 'string' && new RegExp(`^data:(${kind
 const IMG = 'image/(jpeg|png|webp)', VID = 'video/(mp4|webm|quicktime)', AUD = 'audio/(mp4|webm|ogg|mpeg|aac|x-m4a)';
 const httpsUrl = v => v === '' || (isStr(v, 1000) && /^https:\/\//.test(v));
 
+// 사진 편집값: 정해진 칸만, 숫자 범위 안에서
+const EDIT_NUM = { rot: [0, 270], zoom: [1, 5], ox: [-50, 50], oy: [-50, 50], b: [-100, 100], c: [-100, 100], s: [-100, 100], w: [-100, 100], filter: [0, 20] };
+const validEdit = e => !!e && typeof e === 'object' && ['orig', '1:1', '4:5', '3:4', '16:9'].includes(e.ratio) && typeof e.flip === 'boolean'
+  && Object.entries(EDIT_NUM).every(([k, [lo, hi]]) => typeof e[k] === 'number' && e[k] >= lo && e[k] <= hi);
+const pickEdit = e => ({ ratio: e.ratio, flip: e.flip, ...Object.fromEntries(Object.keys(EDIT_NUM).map(k => [k, e[k]])) });
+
 export function validDay(v) {
   if (!v || typeof v !== 'object') return false;
   // 1단계 백업 모양 { photo, text }
@@ -40,7 +46,8 @@ export function validDay(v) {
   const song = v.song;
   return isStr(v.text, 5000)
     && Array.isArray(v.media) && v.media.length <= 10
-    && v.media.every(m => (m.type === 'image' ? dataUrl(m.blob, IMG) : m.type === 'video' && dataUrl(m.blob, VID)) && dataUrl(m.thumb, IMG))
+    && v.media.every(m => (m.type === 'image' ? dataUrl(m.blob, IMG) : m.type === 'video' && dataUrl(m.blob, VID)) && dataUrl(m.thumb, IMG)
+      && (m.orig === undefined || dataUrl(m.orig, IMG)) && (m.edit === undefined || validEdit(m.edit)))
     && Array.isArray(v.voices) && v.voices.length <= 50 && v.voices.every(x => dataUrl(x.blob, AUD) && typeof x.dur === 'number')
     && Array.isArray(v.plans) && v.plans.length <= 100
     && v.plans.every(p => /^(\d\d:\d\d)?$/.test(p.time) && isStr(p.text, 60) && typeof p.done === 'boolean')
@@ -59,7 +66,10 @@ async function revive(v) {
     return d;
   }
   const d = { ...emptyDay(), text: v.text, plans: v.plans.map(({ time, text, done }) => ({ time, text, done })), writtenAt: v.writtenAt, updatedAt: v.updatedAt ?? null };
-  d.media = await Promise.all(v.media.map(async m => ({ type: m.type, blob: await toBlob(m.blob), thumb: await toBlob(m.thumb) })));
+  d.media = await Promise.all(v.media.map(async m => ({
+    type: m.type, blob: await toBlob(m.blob), thumb: await toBlob(m.thumb),
+    ...(m.orig ? { orig: await toBlob(m.orig), edit: m.edit && pickEdit(m.edit) } : {}),
+  })));
   d.voices = await Promise.all(v.voices.map(async x => ({ blob: await toBlob(x.blob), dur: x.dur })));
   if (v.song) d.song = { kind: v.song.kind, title: v.song.title, artist: v.song.artist, art: v.song.art, preview: v.song.preview ?? '', ...(v.song.id ? { id: v.song.id } : {}), ...(v.song.vol !== undefined ? { vol: v.song.vol } : {}) };
   if (v.quote) d.quote = { text: v.quote.text, mood: v.quote.mood };
