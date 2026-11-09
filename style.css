@@ -385,3 +385,10 @@ dialog::backdrop { background: #2a202466; backdrop-filter: blur(2px); }
 .ask[open] { margin: auto; width: min(86vw, 340px); background: var(--card); color: var(--ink); border-radius: 20px; padding: 22px 18px 16px; box-shadow: 0 12px 40px #0004; animation: up .2s ease; }
 .ask p { margin: 0 0 18px; text-align: center; line-height: 1.5; }
 .ask .pill { flex: 1; }
+/* 유튜브 시작 위치 */
+.yt-start-pick { margin-top: 10px; display: grid; gap: 8px; }
+.yt-range { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: .85rem; }
+.yt-range input { width: 56px; padding: 6px 8px; border: 1.5px solid var(--line); border-radius: 10px; background: var(--card); font-size: 16px; text-align: center; }
+.yt-range .pill { padding: 6px 12px; }
+.card .chips button { background: var(--card); border-color: var(--line); color: var(--ink); }
+.card .chips button.on { background: var(--acc); border-color: var(--acc); color: #fff; }

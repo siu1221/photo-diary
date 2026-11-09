@@ -138,10 +138,18 @@ async function joined() {
   const total = parts.reduce((n, p) => n + p.duration, 0);
   const off = new OfflineAudioContext(1, Math.ceil(total * RATE), RATE);
   let at = 0;
+  // 압축기(컴프레서): 큰 소리는 살짝 누르고 작은 소리는 끌어올려 목소리가 노래만큼 또렷하게 들리도록
+  const comp = off.createDynamicsCompressor();
+  comp.threshold.value = -36;
+  comp.knee.value = 12;
+  comp.ratio.value = 8;
+  comp.attack.value = 0.005;
+  comp.release.value = 0.2;
+  comp.connect(off.destination);
   for (const p of parts) {
     const s = off.createBufferSource();
     s.buffer = p;
-    s.connect(off.destination);
+    s.connect(comp);
     s.start(at);
     at += p.duration;
   }
@@ -152,7 +160,7 @@ export function normalize(ab) {
   const d = ab.getChannelData(0);
   let peak = 0;
   for (const x of d) { const a = Math.abs(x); if (a > peak) peak = a; }
-  const g = peak > 0.002 ? Math.min(10, 0.8 / peak) : 1;
+  const g = peak > 0.002 ? Math.min(20, 0.89 / peak) : 1;
   if (g > 1.05) for (let i = 0; i < d.length; i++) d[i] *= g;
   return ab;
 }

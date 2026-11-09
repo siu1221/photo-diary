@@ -5,7 +5,7 @@ export { ask } from './util.js';
 // 소리는 Web Audio의 볼륨 조절기(gain)를 거쳐 나감 — 아이폰은 audio.volume을 무시해서 이 방법만 통함
 // 노래 전용 소리 엔진을 따로 둠: 녹음 뒤 아이폰이 '통화 모드'(작은 소리)를 안 풀면 엔진을 통째로 새로 만들어 스피커로 되돌림
 const SILENT = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=';
-const DEFAULT_VOL = 40;
+const DEFAULT_VOL = 30; // 녹음한 목소리와 섞여도 너무 크지 않게
 export const lastVol = () => { try { return +(localStorage.songVol ?? DEFAULT_VOL); } catch { return DEFAULT_VOL; } };
 const saveVol = v => { try { localStorage.songVol = v; } catch {} };
 
@@ -60,11 +60,15 @@ export function setVolume(v) { vol = v; if (gain) gain.gain.value = v / 100; }
 export const stopSong = () => { want = false; holds = 0; audio.pause(); ytCmd('pauseVideo'); yt = null; };
 
 // --- 유튜브 재생기 조종 (멈춤·이어서). 유튜브가 알려 주는 재생 상태를 듣고, 명령을 보냄
-let yt = null, ytState = -1, resumeYt = false;
+let yt = null, ytState = -1, ytTime = 0, resumeYt = false;
 const ytCmd = func => yt?.contentWindow?.postMessage(JSON.stringify({ event: 'command', func, args: [] }), '*');
 addEventListener('message', e => {
   if (!/^https:\/\/www\.youtube(-nocookie)?\.com$/.test(e.origin) || e.source !== yt?.contentWindow) return;
-  try { const d = JSON.parse(e.data); if (d.info?.playerState !== undefined) ytState = d.info.playerState; } catch {}
+  try {
+    const d = JSON.parse(e.data);
+    if (d.info?.playerState !== undefined) ytState = d.info.playerState;
+    if (typeof d.info?.currentTime === 'number') ytTime = d.info.currentTime;
+  } catch {}
 });
 const ytPlaying = () => !!yt && ytState === 1; // 1 = 재생 중
 
@@ -116,6 +120,40 @@ function sync() {
   for (const b of document.querySelectorAll('.play[data-url]')) b.textContent = !audio.paused && audio.src === b.dataset.url ? '❚❚' : '▶';
 }
 
+// 유튜브 시작 위치: '처음부터' 또는 '구간부터'(분·초 직접 입력, 또는 듣다가 '지금 위치로')
+const mmss = t => `${Math.floor(t / 60)}분 ${String(Math.floor(t % 60)).padStart(2, '0')}초`;
+function startPicker(s, onChange) {
+  const mi = el('input', { type: 'number', min: 0, max: 600, inputMode: 'numeric', value: Math.floor((s.start || 0) / 60), 'aria-label': '시작 분' });
+  const se = el('input', { type: 'number', min: 0, max: 59, inputMode: 'numeric', value: Math.floor((s.start || 0) % 60), 'aria-label': '시작 초' });
+  const fromStart = el('button', { textContent: '처음부터' }), fromPart = el('button', { textContent: '구간부터' });
+  const box = el('div', { className: 'yt-range' });
+  const apply = t => {
+    s.start = Math.max(0, Math.min(36000, Math.floor(t) || 0));
+    mi.value = Math.floor(s.start / 60);
+    se.value = s.start % 60;
+    onChange?.();
+    if (yt) { yt.contentWindow?.postMessage(JSON.stringify({ event: 'command', func: 'seekTo', args: [s.start, true] }), '*'); }
+  };
+  const draw = () => {
+    const part = s.start > 0 || box.dataset.part === '1';
+    fromStart.classList.toggle('on', !part);
+    fromPart.classList.toggle('on', part);
+    box.hidden = !part;
+  };
+  fromStart.onclick = () => { delete box.dataset.part; apply(0); draw(); };
+  fromPart.onclick = () => { box.dataset.part = '1'; draw(); };
+  const onInput = () => apply(+mi.value * 60 + +se.value);
+  mi.onchange = se.onchange = onInput;
+  box.append(mi, '분', se, '초',
+    el('button', { className: 'pill', textContent: '🎯 지금 듣는 곳으로', onclick: () => {
+      if (!yt) return toast('먼저 ▶로 노래를 틀고, 원하는 곳에서 눌러 주세요');
+      apply(ytTime);
+      toast(`${mmss(s.start)}부터 들리게 했어요`);
+    } }));
+  draw();
+  return el('div', { className: 'yt-start-pick' }, el('div', { className: 'chips' }, fromStart, fromPart), box);
+}
+
 function playBtn(url, getVol, loop) {
   // 처음 표시도 지금 재생 상태대로 (이미 나오고 있는 노래면 ❚❚)
   const b = el('button', { className: 'play', textContent: !audio.paused && audio.src === url ? '❚❚' : '▶', 'aria-label': '미리듣기', 'data-url': url });
@@ -143,7 +181,7 @@ export function songCard(s, onRemove, onChange) {
       yt = el('iframe', {
         className: 'yt-frame', title: s.title, allow: 'autoplay; encrypted-media',
         // enablejsapi: 앱이 멈춤·재생 명령을 보낼 수 있게
-        src: `https://www.youtube-nocookie.com/embed/${s.id}?autoplay=1&playsinline=1&enablejsapi=1&origin=${encodeURIComponent(location.origin)}`,
+        src: `https://www.youtube-nocookie.com/embed/${s.id}?autoplay=1&playsinline=1&enablejsapi=1&start=${s.start || 0}&origin=${encodeURIComponent(location.origin)}`,
       });
       const frame = yt;
       frame.onload = () => frame.contentWindow.postMessage(JSON.stringify({ event: 'listening', id: 1, channel: 'widget' }), '*');
@@ -160,7 +198,7 @@ export function songCard(s, onRemove, onChange) {
           setVolume(s.vol);
           onChange?.();
         } }), '🔊'));
-    } else box.append(el('p', { className: 'small muted', textContent: '유튜브 노래는 휴대폰 볼륨 버튼으로 조절해 주세요.' }));
+    } else box.append(startPicker(s, onChange), el('p', { className: 'small muted', textContent: '유튜브 노래는 휴대폰 볼륨 버튼으로 조절해 주세요.' }));
   }
   sync();
   return box;

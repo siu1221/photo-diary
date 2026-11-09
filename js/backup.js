@@ -54,6 +54,7 @@ export function validDay(v) {
     && (v.quote === null || (isStr(v.quote.text, 200) && isStr(v.quote.mood, 40)))
     && (song === null || (['itunes', 'youtube'].includes(song.kind) && isStr(song.title, 300) && isStr(song.artist, 300)
       && httpsUrl(song.art) && httpsUrl(song.preview ?? '') && (song.kind !== 'youtube' || /^[\w-]{11}$/.test(song.id))
+      && (song.start === undefined || (typeof song.start === 'number' && song.start >= 0 && song.start <= 36000))
       && (song.vol === undefined || (typeof song.vol === 'number' && song.vol >= 0 && song.vol <= 100))))
     && (v.writtenAt === null || isStr(v.writtenAt, 40));
 }
@@ -71,7 +72,7 @@ async function revive(v) {
     ...(m.orig ? { orig: await toBlob(m.orig), edit: m.edit && pickEdit(m.edit) } : {}),
   })));
   d.voices = await Promise.all(v.voices.map(async x => ({ blob: await toBlob(x.blob), dur: x.dur })));
-  if (v.song) d.song = { kind: v.song.kind, title: v.song.title, artist: v.song.artist, art: v.song.art, preview: v.song.preview ?? '', ...(v.song.id ? { id: v.song.id } : {}), ...(v.song.vol !== undefined ? { vol: v.song.vol } : {}) };
+  if (v.song) d.song = { kind: v.song.kind, title: v.song.title, artist: v.song.artist, art: v.song.art, preview: v.song.preview ?? '', ...(v.song.id ? { id: v.song.id } : {}), ...(v.song.vol !== undefined ? { vol: v.song.vol } : {}), ...(v.song.start ? { start: v.song.start } : {}) };
   if (v.quote) d.quote = { text: v.quote.text, mood: v.quote.mood };
   return d;
 }
