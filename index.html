@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="하루 한 장">
+<meta name="theme-color" content="#fff8f4">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Gowun+Dodum&family=Jua&display=swap">
+<link rel="stylesheet" href="style.css">
+<script>
+  // 저장해 둔 색 테마·다크모드를 화면이 그려지기 전에 적용 (깜빡임 방지)
+  try { document.documentElement.dataset.theme = localStorage.theme || 'pink'; document.documentElement.dataset.mode = localStorage.mode || 'light'; } catch {}
+</script>
+<title>하루 한 장</title>
+</head>
+<body>
+
+<!-- 시작 화면 -->
+<section id="splash" class="screen active">
+  <button id="splash-go" class="splash-btn" aria-label="시작하기">
+    <span class="logo" aria-hidden="true">
+      <span class="polaroid p1"></span>
+      <span class="polaroid p2"><span class="heart">♥</span></span>
+      <span class="spark s1">✦</span><span class="spark s2">✦</span>
+    </span>
+    <span class="brand">하루 한 장</span>
+    <span class="tagline">오늘의 나를, 한 장에 담아요</span>
+    <span class="tap-hint">화면을 터치해 주세요</span>
+  </button>
+</section>
+
+<!-- 달력 -->
+<section id="cal" class="screen">
+  <header class="cal-head">
+    <button id="ym" class="ym" aria-label="연도와 달 바꾸기">
+      <span id="mon" class="mon">Nov</span><span id="yr" class="yr">2026</span><span class="caret" aria-hidden="true">▾</span>
+    </button>
+    <div class="head-actions">
+      <button id="open-report" class="icon-btn" aria-label="월간 리포트">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V11M12 20V5M19 20v-6" /></svg>
+      </button>
+      <button id="open-menu" class="icon-btn" aria-label="메뉴">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></svg>
+      </button>
+    </div>
+  </header>
+  <div class="gauge-wrap">
+    <div id="gauge" class="gauge" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-label="이번 달 채운 정도"><div id="gauge-fill" class="gauge-fill"></div></div>
+    <div class="gauge-text"><span id="gauge-count">0 / 30</span><span id="gauge-msg" class="gauge-msg"></span><span id="gauge-pct" class="gauge-pct">0%</span></div>
+  </div>
+  <button id="report-banner" class="report-banner" hidden></button>
+  <div class="week" aria-hidden="true"><span class="sun">Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span class="sat">Sat</span></div>
+  <main id="grid" class="grid"></main>
+  <section id="memory" class="memory" aria-label="기억 한 장"></section>
+</section>
+
+<!-- 하루 쓰기 -->
+<section id="day" class="screen">
+  <header class="topbar">
+    <button id="day-back" class="icon-btn" aria-label="뒤로">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+    </button>
+    <h2 id="day-title" class="title"></h2>
+    <button id="day-save" class="icon-btn check" aria-label="저장">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 12.5l5 5L19.5 7"/></svg>
+    </button>
+  </header>
+  <div class="scroll">
+    <section class="card media-card">
+      <div class="media-wrap">
+        <div id="media-track" class="media-track"></div>
+        <button id="media-prev" class="media-arrow prev" aria-label="이전 사진" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4l-8 8 8 8"/></svg></button>
+        <button id="media-next" class="media-arrow next" aria-label="다음 사진" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4l8 8-8 8"/></svg></button>
+      </div>
+      <div id="media-dots" class="dots" aria-hidden="true"></div>
+      <div class="media-actions">
+        <label class="pill acc">＋ 사진 · 영상<input id="media-input" type="file" accept="image/*,video/*" multiple hidden></label>
+        <span id="media-count" class="muted small"></span>
+      </div>
+    </section>
+
+    <section class="card">
+      <h3 class="card-title">♪ 오늘의 노래</h3>
+      <div id="song-view"></div>
+    </section>
+
+    <section class="card letter">
+      <div class="letter-head">
+        <h3 class="card-title en">Dear me,</h3>
+        <button id="open-rec" class="icon-btn mic" aria-label="음성으로 남기기">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>
+        </button>
+      </div>
+      <textarea id="diary" maxlength="5000" aria-label="일기" placeholder="오늘 하루는 어땠나요?&#10;하고 싶었던 말, 하지 못했던 말도 여기에 적어 봐요."></textarea>
+      <ul id="voice-list" class="voice-list"></ul>
+    </section>
+
+    <section class="card">
+      <h3 class="card-title">✓ 오늘의 일정</h3>
+      <ul id="plan-list" class="plan-list"></ul>
+      <form id="plan-form" class="plan-form">
+        <input id="plan-time" type="time" aria-label="시간">
+        <input id="plan-text" maxlength="60" placeholder="일정 적기" aria-label="일정 내용" required>
+        <button class="pill acc" aria-label="일정 추가">＋</button>
+      </form>
+    </section>
+
+    <section class="card quote-card">
+      <h3 class="card-title">❀ 오늘 나에게 주는 한 마디</h3>
+      <div id="quote-view"></div>
+      <div class="row">
+        <button id="quote-random" class="pill">🎲 랜덤으로</button>
+        <button id="quote-pick" class="pill">💌 골라서</button>
+      </div>
+    </section>
+
+    <button id="day-delete" class="danger-link">이 날의 기록 지우기</button>
+  </div>
+</section>
+
+<!-- 사진 편집 -->
+<section id="imgedit" class="screen dark">
+  <header class="topbar">
+    <button id="ie-cancel" class="icon-btn" aria-label="취소"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <h2 class="title">사진 편집</h2>
+    <button id="ie-done" class="icon-btn check" aria-label="적용"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 12.5l5 5L19.5 7"/></svg></button>
+  </header>
+  <div id="ie-stage" class="ie-stage"><canvas id="ie-canvas" aria-label="사진 미리보기. 끌어서 위치, 두 손가락으로 확대"></canvas></div>
+  <div class="tabs" role="tablist">
+    <button data-tab="crop" class="on" role="tab">자르기</button>
+    <button data-tab="adjust" role="tab">보정</button>
+    <button data-tab="filter" role="tab">필터</button>
+  </div>
+  <div class="ie-panel" data-panel="crop">
+    <div class="chips" id="ie-ratios">
+      <button data-ratio="orig" class="on">원본</button><button data-ratio="1:1">1:1</button><button data-ratio="4:5">4:5</button><button data-ratio="3:4">3:4</button><button data-ratio="16:9">16:9</button>
+    </div>
+    <label class="slider">확대 <input id="ie-zoom" type="range" min="1" max="5" step="0.01" value="1"></label>
+    <div class="chips">
+      <button id="ie-rotate">⟲ 회전</button><button id="ie-flip">⇋ 뒤집기</button><button id="ie-reset">처음으로</button>
+    </div>
+  </div>
+  <div class="ie-panel" data-panel="adjust" hidden>
+    <label class="slider">밝기 <input data-k="b" type="range" min="-100" max="100" value="0"></label>
+    <label class="slider">대비 <input data-k="c" type="range" min="-100" max="100" value="0"></label>
+    <label class="slider">채도 <input data-k="s" type="range" min="-100" max="100" value="0"></label>
+    <label class="slider">따뜻함 <input data-k="w" type="range" min="-100" max="100" value="0"></label>
+  </div>
+  <div class="ie-panel" data-panel="filter" hidden>
+    <div class="chips" id="ie-filters"></div>
+  </div>
+</section>
+
+<!-- 영상 편집 -->
+<section id="videdit" class="screen dark">
+  <header class="topbar">
+    <button id="ve-cancel" class="icon-btn" aria-label="취소"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <h2 class="title">영상 편집</h2>
+    <button id="ve-done" class="icon-btn check" aria-label="적용"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 12.5l5 5L19.5 7"/></svg></button>
+  </header>
+  <div class="ve-stage">
+    <video id="ve-video" playsinline preload="auto"></video>
+    <button id="ve-play" class="play-big" aria-label="미리보기 재생">▶</button>
+  </div>
+  <div class="ve-tools">
+    <div id="ve-strip" class="ve-strip" aria-label="영상 구간. 양쪽 손잡이를 끌어 길이를 정해요">
+      <div id="ve-thumbs" class="ve-thumbs"></div>
+      <div id="ve-sel" class="ve-sel"><span class="h left"></span><span class="h right"></span></div>
+      <div id="ve-head" class="ve-head"></div>
+    </div>
+    <p id="ve-info" class="ve-info"></p>
+    <p class="ve-hint">양쪽 손잡이를 끌어 구간을 정하고, 막대를 꾹 누르면 그 장면을 볼 수 있어요</p>
+    <div class="ve-sound">
+      <button id="ve-mute" class="pill">🔊 소리 켜짐</button>
+      <label class="slider">볼륨 <input id="ve-vol" type="range" min="0" max="200" value="100"></label>
+    </div>
+    <div id="ve-progress" class="progress" hidden><span>영상을 만드는 중이에요…</span><progress max="1" value="0"></progress></div>
+  </div>
+</section>
+
+<!-- 음성 녹음 -->
+<section id="rec" class="screen">
+  <header class="topbar">
+    <button id="rec-cancel" class="icon-btn" aria-label="취소"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <h2 class="title">음성으로 남기기</h2>
+    <button id="rec-done" class="icon-btn check" aria-label="등록" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 12.5l5 5L19.5 7"/></svg></button>
+  </header>
+  <div class="rec-body">
+    <p id="rec-time" class="rec-time">00:00</p>
+    <canvas id="rec-wave" class="rec-wave" aria-hidden="true"></canvas>
+    <p id="rec-status" class="muted">가운데 버튼을 누르면 녹음이 시작돼요</p>
+    <div id="rec-peek" class="rec-review" hidden>
+      <p class="small muted" style="margin:0;text-align:center">지금까지 녹음한 부분</p>
+      <audio id="rec-peek-audio" controls></audio>
+    </div>
+    <div id="rec-review" class="rec-review" hidden>
+      <audio id="rec-audio" controls></audio>
+      <div class="row">
+        <button id="rec-retake" class="pill">↺ 다시 녹음</button>
+        <button id="rec-use" class="pill acc">이걸로 등록</button>
+      </div>
+    </div>
+  </div>
+  <div id="rec-controls" class="rec-controls">
+    <button id="rec-redo" class="round small" aria-label="처음부터 다시 녹음" disabled>↺</button>
+    <button id="rec-main" class="round big" aria-label="녹음 시작"><span class="dot"></span></button>
+    <button id="rec-stop" class="round small" aria-label="녹음 끝내기" disabled>■</button>
+  </div>
+</section>
+
+<!-- 월간 리포트 -->
+<section id="report" class="screen">
+  <header class="topbar">
+    <button id="report-back" class="icon-btn" aria-label="뒤로"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <h2 class="title">월간 리포트</h2>
+    <span class="icon-btn" aria-hidden="true"></span>
+  </header>
+  <div id="report-body" class="scroll"></div>
+</section>
+
+<!-- 연·월 고르기 -->
+<dialog id="picker" class="sheet">
+  <div class="picker-head">
+    <button id="pk-year" class="pk-year"></button>
+    <button id="pk-today" class="pill">Today</button>
+  </div>
+  <div id="pk-grid" class="pk-grid"></div>
+</dialog>
+
+<!-- 노래 고르기 -->
+<dialog id="songs" class="sheet tall">
+  <div class="sheet-head"><h3>노래 고르기</h3><button class="icon-btn" data-close aria-label="닫기">×</button></div>
+  <label class="slider">🔈 미리듣기 소리 <input id="song-vol" type="range" min="0" max="100" aria-label="미리듣기 소리 크기"></label>
+  <form id="song-form" class="search">
+    <input id="song-q" type="search" placeholder="노래 제목이나 가수 이름" enterkeyhint="search" aria-label="노래 검색">
+    <button class="pill acc">검색</button>
+  </form>
+  <ul id="song-results" class="song-results"></ul>
+  <details class="yt">
+    <summary>유튜브 링크로 넣기</summary>
+    <form id="yt-form" class="yt-form">
+      <input id="yt-url" inputmode="url" placeholder="https://youtu.be/..." aria-label="유튜브 링크" required>
+      <button class="pill acc">넣기</button>
+    </form>
+  </details>
+  <p class="muted small">검색은 Apple Music 정보로 하고, 30초 미리듣기를 들을 수 있어요.</p>
+</dialog>
+
+<!-- 한 마디 고르기 -->
+<dialog id="quotes" class="sheet tall">
+  <div class="sheet-head"><h3>오늘의 한 마디</h3><button class="icon-btn" data-close aria-label="닫기">×</button></div>
+  <div id="mood-chips" class="chips scroll-x"></div>
+  <form id="myquote-form" class="search" hidden>
+    <input id="myquote" maxlength="120" placeholder="나에게 해 주고 싶은 말 추가" aria-label="내 문구">
+    <button class="pill acc">추가</button>
+  </form>
+  <ul id="quote-list" class="quote-list"></ul>
+</dialog>
+
+<!-- 메뉴 -->
+<dialog id="menu" class="sheet">
+  <div class="sheet-head"><h3>설정</h3><button class="icon-btn" data-close aria-label="닫기">×</button></div>
+  <h4 class="set-title">색 테마</h4>
+  <div id="themes" class="swatches">
+    <button data-theme-pick="pink" aria-label="핑크"></button><button data-theme-pick="sky" aria-label="스카이"></button>
+    <button data-theme-pick="mint" aria-label="민트"></button><button data-theme-pick="lav" aria-label="라벤더"></button>
+    <button data-theme-pick="peach" aria-label="피치"></button><button data-theme-pick="lemon" aria-label="레몬"></button>
+  </div>
+  <h4 class="set-title">화면 모드</h4>
+  <div id="modes" class="seg">
+    <button data-mode-pick="light">☀️ 라이트</button><button data-mode-pick="dark">🌙 다크</button><button data-mode-pick="system">📱 기기 설정</button>
+  </div>
+  <label class="switch-row">일기를 열면 노래 자동 재생 <input id="autoplay" type="checkbox"></label>
+  <h4 class="set-title">백업</h4>
+  <p class="muted small">기록은 이 기기 안에만 저장돼요. 가끔 백업 파일을 만들어 두세요.</p>
+  <div class="menu-list">
+    <button id="export" class="pill">📦 백업 파일 만들기</button>
+    <label class="pill">📂 백업 불러오기<input id="import" type="file" accept="application/json,.json" hidden></label>
+  </div>
+</dialog>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
