@@ -54,7 +54,7 @@ for (const row of document.querySelectorAll('.scroll-x')) {
   let sx = null, start = 0, moved = false;
   row.addEventListener('pointerdown', e => { if (e.pointerType === 'mouse') { sx = e.clientX; start = row.scrollLeft; moved = false; } });
   addEventListener('pointermove', e => {
-    if (sx === null) return;
+    if (sx === null || row.dataset.lock) return; // lock: 그 줄이 지금 순서 바꾸기 중
     if (Math.abs(e.clientX - sx) > 5) moved = true;
     row.scrollLeft = start - (e.clientX - sx);
   });

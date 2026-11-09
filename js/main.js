@@ -1,12 +1,13 @@
 import { $, openScreen, closeScreen, toast } from './util.js';
 import { migrateBlobs } from './db.js';
-import { renderCal } from './calendar.js';
+import { renderCal, fitGrid } from './calendar.js';
 import { checkBanner } from './report.js';
 import './backup.js';
 
 $('splash-go').onclick = () => {
   closeScreen('splash');
   openScreen('cal');
+  fitGrid();
 };
 
 // --- 설정: 색 테마 / 화면 모드 / 노래 자동 재생 (이 기기에만 저장)
@@ -36,4 +37,7 @@ migrateBlobs().then(({ broken }) => {
   if (broken) toast(`아이폰 저장 오류로 읽을 수 없게 된 사진·영상이 ${broken}개 있어요. 백업 파일이 있다면 불러와 주세요.`);
 }).catch(() => {}).finally(renderCal);
 checkBanner();
+// 다른 앱(유튜브 등)에 다녀왔을 때 아이폰이 얼어붙은 옛 화면을 되살리면 새로 고침
+addEventListener('pageshow', e => { if (e.persisted) location.reload(); });
+
 if (location.protocol !== 'file:') navigator.serviceWorker?.register('sw.js');

@@ -4,7 +4,7 @@ import { renderCal } from './calendar.js';
 import { editImages } from './image-editor.js';
 import { editVideo } from './video-editor.js';
 import { recordVoice } from './recorder.js';
-import { pickSong, songCard, stopSong, playSong, lastVol, hold, release } from './music.js';
+import { pickSong, songCard, stopSong, playSong, lastVol, hold, release, ask } from './music.js';
 import { pickQuote, randomQuote } from './quotes.js';
 
 const MAX_MEDIA = 10;
@@ -59,7 +59,6 @@ function renderMedia(focus = 0) { // focus: 다 그린 뒤 보여 줄 칸 (방�
         ? songAware(el('video', { src: blobUrl(m.blob), poster: blobUrl(m.thumb), controls: true, playsInline: true, preload: 'metadata' }))
         : el('img', { src: blobUrl(m.blob), alt: `${i + 1}번째 사진`, decoding: 'async' });
       const tools = el('div', { className: 'tools' });
-      if (i > 0) tools.append(el('button', { textContent: '◀', 'aria-label': '앞으로 옮기기 (첫 번째가 달력 표지)', onclick: () => move(i) }));
       tools.append(
         el('button', { textContent: '✎', 'aria-label': '편집', onclick: () => reEdit(i) }),
         el('button', { textContent: '✕', 'aria-label': '삭제', onclick: () => removeMedia(i) }));
@@ -140,17 +139,18 @@ async function onPick(e) {
   const room = MAX_MEDIA - day.media.length;
   if (files.length > room) toast(`사진·영상은 하루에 ${MAX_MEDIA}개까지라 ${room}개만 올릴게요`);
   const pick = files.slice(0, room);
-  // 사진은 한꺼번에 편집해서 한 번에 등록
-  const images = pick.filter(f => !f.type.startsWith('video/'));
-  if (images.length) {
-    const items = await editImages(images.map(src => ({ src })));
-    if (items) { day.media.push(...items); touch(); renderMedia(day.media.length - 1); }
-  }
-  // 영상은 하나씩 (구간 자르기)
-  for (const f of pick.filter(f => f.type.startsWith('video/'))) {
+  // 사진은 한꺼번에 편집, 영상은 하나씩 자르기. 올라가는 순서는 처음 고른 순서 그대로
+  // (사진끼리는 편집 화면에서 바꾼 순서가 그 사진 자리들에 차례로 들어감)
+  const isVid = f => f.type.startsWith('video/');
+  const images = pick.filter(f => !isVid(f));
+  const edited = images.length ? (await editImages(images.map(src => ({ src })))) || [] : [];
+  const slots = [];
+  for (const f of pick) {
+    if (!isVid(f)) { if (edited.length) slots.push(edited.shift()); continue; }
     const item = await withHold(() => editVideo(f));
-    if (item) { day.media.push(item); touch(); renderMedia(day.media.length - 1); }
+    if (item) slots.push(item);
   }
+  if (slots.length) { day.media.push(...slots); touch(); renderMedia(day.media.length - slots.length); }
 }
 $('media-input').onchange = onPick;
 
@@ -161,12 +161,8 @@ async function reEdit(i) {
   if (item) { day.media[i] = item; touch(); }
   renderMedia(i);
 }
-function move(i) {
-  [day.media[i - 1], day.media[i]] = [day.media[i], day.media[i - 1]];
-  touch(); renderMedia(i - 1);
-}
 function removeMedia(i) {
-  if (!confirm('이 사진(영상)을 뺄까요?')) return;
+  if (!ask('이 사진(영상)을 뺄까요?')) return;
   day.media.splice(i, 1);
   touch(); renderMedia(Math.max(0, Math.min(i, day.media.length - 1)));
 }
@@ -211,7 +207,7 @@ function renderVoices() {
     };
     return el('li', {}, btn, bars, el('span', { className: 'small', textContent: fmtSec(v.dur) }),
       el('button', { className: 'x', textContent: '✕', 'aria-label': '음성 삭제', onclick: () => {
-        if (!confirm('이 음성을 지울까요?')) return;
+        if (!ask('이 음성을 지울까요?')) return;
         player.pause(); day.voices.splice(i, 1); touch(); renderVoices();
       } }));
   }));
@@ -272,11 +268,11 @@ $('day-save').onclick = async () => {
   toast(hasAny(day) ? '오늘도 수고했어요 ♡' : '비어 있어서 저장하지 않았어요');
 };
 $('day-back').onclick = () => {
-  if (dirty && !confirm('저장하지 않고 나갈까요?')) return;
+  if (dirty && !ask('저장하지 않고 나갈까요?')) return;
   closeDay();
 };
 $('day-delete').onclick = async () => {
-  if (!confirm('이 날의 사진, 글, 음성, 일정을 모두 지울까요?')) return;
+  if (!ask('이 날의 사진, 글, 음성, 일정을 모두 지울까요?')) return;
   await delDay(key);
   closeDay();
   renderCal();

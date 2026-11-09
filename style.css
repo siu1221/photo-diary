@@ -98,7 +98,7 @@ button:disabled { opacity: .35; cursor: default; }
 
 /* 달력 */
 #cal { overflow-y: auto; }
-#cal > * { width: 100%; max-width: 640px; margin-inline: auto; padding-inline: 10px; }
+#cal > * { width: 100%; max-width: 640px; margin-inline: auto; padding-inline: 6px; }
 .cal-head { display: flex; align-items: center; justify-content: space-between; padding-top: 10px; }
 .ym { display: flex; align-items: baseline; gap: 8px; padding: 4px; }
 .mon { font: 600 2.8rem/1 var(--en); color: var(--acc-d); }
@@ -120,9 +120,9 @@ button:disabled { opacity: .35; cursor: default; }
 }
 .week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin-top: 16px; text-align: center; font: 500 .8rem var(--en); color: var(--soft); }
 .week .sun { color: var(--sun); } .week .sat { color: var(--sat); }
-.grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; padding-top: 8px; padding-bottom: 18px; touch-action: pan-y; }
+.grid { display: grid; grid-template-columns: repeat(7, 1fr); grid-auto-rows: 90px; gap: 4px; padding-top: 6px; padding-bottom: 14px; touch-action: pan-y; }
 .cell {
-  position: relative; aspect-ratio: 3 / 5.6; border-radius: 14px; background: var(--card) center / cover no-repeat;
+  position: relative; min-height: 0; border-radius: 12px; background: var(--card) center / cover no-repeat;
   box-shadow: var(--shadow); overflow: hidden; text-align: left;
 }
 .cell .num { position: absolute; top: 5px; left: 6px; font: 500 .85rem var(--en); }
@@ -167,8 +167,9 @@ dialog::backdrop { background: #2a202466; backdrop-filter: blur(2px); }
 .media-card { padding: 10px; }
 .media-track { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; border-radius: 14px; scrollbar-width: none; }
 .media-track::-webkit-scrollbar { display: none; }
-.media-item { position: relative; flex: 0 0 100%; scroll-snap-align: center; aspect-ratio: 4 / 5; background: #000; display: grid; place-items: center; }
-.media-item img, .media-item video { width: 100%; height: 100%; object-fit: contain; }
+.media-item { position: relative; flex: 0 0 100%; scroll-snap-align: center; aspect-ratio: 4 / 5; background: #000; }
+/* 칸 안에 꽉 맞춰 넣기: 세로로 긴 영상도 아래가 잘리지 않게 (아이폰 Safari는 % 높이를 무시해서 절대 위치로) */
+.media-item img, .media-item video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
 .media-item .tools { position: absolute; top: 8px; right: 8px; display: flex; gap: 6px; }
 .media-item .tools button { width: 34px; height: 34px; border-radius: 50%; background: #0007; color: #fff; font-size: .95rem; }
 .media-empty {
@@ -375,3 +376,7 @@ dialog::backdrop { background: #2a202466; backdrop-filter: blur(2px); }
 .media-track { overscroll-behavior-x: contain; }
 .yt-quick { display: flex; gap: 8px; }
 .yt-quick .pill { flex: 1; }
+.ie-thumbs button { position: relative; -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
+.ie-thumbs .num { position: absolute; left: 3px; top: 2px; min-width: 16px; height: 16px; border-radius: 8px; background: #0009; color: #fff; font: 600 .7rem/16px var(--en); text-align: center; }
+.ie-thumbs button.on .num { background: var(--acc); }
+.ie-thumbs button.lift { transform: scale(1.15); opacity: 1; box-shadow: 0 6px 14px #0008; z-index: 1; }

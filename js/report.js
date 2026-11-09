@@ -1,6 +1,6 @@
 import { $, el, esc, keyOf, pad, MON, DOW, parseKey, toast, openScreen, closeScreen, pickMime, canRecordCanvas, once, cssVar } from './util.js';
 import { getRange, getMeta, setMeta, hasDiary } from './db.js';
-import { view } from './calendar.js';
+import { view, fitGrid } from './calendar.js';
 
 // 월간 리포트는 다음 달 1일부터 열림
 const ym = (y, m) => `${y}-${pad(m + 1)}`;
@@ -13,6 +13,7 @@ export async function checkBanner() {
   b.hidden = !!(await getMeta('seen-' + ym(y, m))) || !Object.values(data).some(hasDiary);
   b.textContent = `📮 ${m + 1}월의 월간 리포트가 도착했어요! 열어 보기 ›`;
   b.onclick = () => openReport(y, m);
+  fitGrid();
 }
 
 $('open-report').onclick = () => {
@@ -53,6 +54,7 @@ let reelData;
 async function openReport(y, m) {
   await setMeta('seen-' + ym(y, m), true);
   $('report-banner').hidden = true;
+  fitGrid();
   const data = await getRange(keyOf(y, m, 1), keyOf(y, m, 31));
   const s = summarize(y, m, data);
   reelData = { y, m, data, s };

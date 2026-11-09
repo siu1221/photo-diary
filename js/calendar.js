@@ -56,6 +56,7 @@ export async function renderCal() {
     cells.push(b);
   }
   $('grid').replaceChildren(...cells);
+  fitGrid();
 
   const pct = Math.round(filled / last * 100);
   $('gauge-fill').style.width = pct + '%';
@@ -65,6 +66,18 @@ export async function renderCal() {
   $('gauge-msg').textContent = CHEER.filter(([p]) => pct >= p).pop()[1];
   renderMemory();
 }
+
+// 달력이 화면 아래까지 꽉 차도록 칸 높이 맞추기 (사진이 크게 보이게)
+export function fitGrid() {
+  const g = $('grid');
+  if (!g.offsetParent) return; // 달력이 아직 안 보이면 나중에
+  const rows = Math.ceil(g.children.length / 7), gap = 4;
+  const top = g.getBoundingClientRect().top + $('cal').scrollTop + 6;
+  const avail = innerHeight - top - 14 - rows * gap;
+  const colW = (g.clientWidth - 12 - 6 * gap) / 7;
+  g.style.gridAutoRows = Math.max(colW * 1.5, avail / rows) + 'px';
+}
+addEventListener('resize', fitGrid);
 
 export function goMonth(y, m) {
   view.setFullYear(y, m, 1);

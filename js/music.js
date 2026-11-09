@@ -25,6 +25,8 @@ export function playSong(url, vol, loop = false) {
   want = true;
   gain.gain.value = vol / 100;
   audio.loop = loop;
+  if (audio.src === url && !audio.paused) return; // 이미 그 노래가 나오는 중이면 그대로 이어서
+  pos = 0;
   audio.src = url;
   audio.play().catch(() => {});
 }
@@ -33,19 +35,27 @@ export const stopSong = () => { want = false; holds = 0; audio.pause(); };
 
 // 녹음·영상을 트는 동안 잠시 멈췄다가(hold) 끝나면 이어서(release)
 let holds = 0, resumeAfter = false;
+let pos = 0; // 멈춘 자리 (아이폰이 다시 틀 때 처음으로 되감는 경우가 있어서 기억해 둠)
+audio.addEventListener('timeupdate', () => { if (audio.currentTime > 0.5) pos = audio.currentTime; });
+function resume() {
+  audioCtx();
+  const at = pos;
+  audio.play().then(() => { if (at > 1 && Math.abs(audio.currentTime - at) > 1.5) audio.currentTime = at; }).catch(() => {});
+}
 export function hold() {
   if (holds++ === 0) { resumeAfter = want && !audio.paused; audio.pause(); }
 }
 export function release() {
   if (holds === 0) return;
-  if (--holds === 0 && resumeAfter && want) { audioCtx(); audio.play().catch(() => {}); }
+  if (--holds === 0 && resumeAfter && want) resume();
 }
 // 아이폰은 다른 소리(영상·전화·알림·화면 잠금)가 끼어들면 노래를 몰래 멈춤 → 다음 터치나 앱 복귀 때 이어서 재생
-const revive = () => {
+export const revive = () => {
   if (!want || holds) return;
-  audioCtx();
-  if (audio.paused) audio.play().catch(() => {});
+  if (audio.paused) resume(); else audioCtx();
 };
+// 확인창(지울까요?)이 뜨면 아이폰이 노래를 끊음 → 창이 닫히면 이어서
+export const ask = msg => { const r = confirm(msg); revive(); return r; };
 document.addEventListener('pointerdown', e => { if (!e.target.closest('.play')) revive(); }, true);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) revive(); });
 audio.addEventListener('ended', () => { if (!audio.loop) want = false; });
@@ -59,7 +69,8 @@ audio.addEventListener('pause', sync);
 audio.addEventListener('ended', sync);
 
 function playBtn(url, getVol, loop) {
-  const b = el('button', { className: 'play', textContent: '▶', 'aria-label': '미리듣기', 'data-url': url });
+  // 처음 표시도 지금 재생 상태대로 (이미 나오고 있는 노래면 ❚❚)
+  const b = el('button', { className: 'play', textContent: !audio.paused && audio.src === url ? '❚❚' : '▶', 'aria-label': '미리듣기', 'data-url': url });
   b.onclick = e => {
     e.stopPropagation();
     if (audio.src === url && !audio.paused) { want = false; return audio.pause(); }
@@ -118,7 +129,8 @@ export function pickSong() {
 function choose(song) {
   const d = done;
   done = null;
-  stopSong(); // 미리듣기 끄기
+  // 미리듣기로 듣던 그 노래를 고르면 끊지 않고 계속(반복) 재생, 아니면 끄기
+  if (song.preview && audio.src === song.preview && !audio.paused) { audio.loop = true; want = true; } else stopSong();
   d({ ...song, vol: lastVol() });
   $('songs').close();
 }
@@ -151,10 +163,10 @@ $('song-form').onsubmit = async e => {
 };
 
 // 유튜브에서 찾기: 아이폰에 유튜브 앱이 있으면 앱으로, 없으면 Safari로 열림
-$('yt-search').onclick = () => {
-  const q = $('song-q').value.trim();
-  open(q ? `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}` : 'https://www.youtube.com/', '_blank');
-};
+// 일반 링크(a)로 열기: 아이폰 홈 화면 앱에서 window.open으로 나갔다 오면 화면이 멈추는 문제가 있어서
+const ytHref = () => { const q = $('song-q').value.trim(); return q ? `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}` : 'https://www.youtube.com/'; };
+$('yt-search').addEventListener('pointerdown', () => { $('yt-search').href = ytHref(); });
+$('yt-search').addEventListener('focus', () => { $('yt-search').href = ytHref(); });
 // 유튜브에서 '공유 → 링크 복사' 하고 돌아와서 한 번에 넣기
 $('yt-paste').onclick = async () => {
   let text = '';

@@ -1,4 +1,5 @@
 import { $, el, toast, openScreen, closeScreen, canvasBlob, thumbOf } from './util.js';
+import { ask } from './music.js';
 
 const RATIOS = { orig: null, '1:1': 1, '4:5': 4 / 5, '3:4': 3 / 4, '16:9': 16 / 9 };
 const FILTERS = [
@@ -48,11 +49,46 @@ function select(i) {
   syncUI();
   layout();
 }
+// 사진 순서 줄: 번호가 곧 올라갈 순서. 누르면 그 사진 편집, 꾹 누른 채 옆으로 끌면 순서 바꾸기
 function drawThumbs() {
   $('ie-thumbs').hidden = photos.length < 2;
   $('ie-thumbs').replaceChildren(...photos.map((p, k) =>
-    el('button', { 'aria-label': `${k + 1}번째 사진`, onclick: () => select(k) }, el('img', { src: p.url, alt: '' }))));
+    el('button', { 'aria-label': `${k + 1}번째 사진. 꾹 눌러 끌면 순서 바꾸기`, 'data-k': k, onclick: () => { if (!dragged) select(k); } },
+      el('img', { src: p.url, alt: '', draggable: false }), el('span', { className: 'num', textContent: k + 1 }))));
+  [...$('ie-thumbs').children].forEach((b, k) => b.classList.toggle('on', k === cur));
 }
+let drag = null, dragged = false, holdT, holdX = 0;
+const strip = $('ie-thumbs');
+strip.addEventListener('pointerdown', e => {
+  const b = e.target.closest('[data-k]');
+  if (!b) return;
+  dragged = false;
+  holdX = e.clientX;
+  holdT = setTimeout(() => { drag = { from: +b.dataset.k }; strip.dataset.lock = '1'; b.classList.add('lift'); navigator.vibrate?.(15); }, 380);
+});
+strip.addEventListener('pointermove', e => { if (!drag && Math.abs(e.clientX - holdX) > 8) clearTimeout(holdT); }); // 그냥 넘기는 중이면 꾹 누르기 취소
+strip.addEventListener('pointermove', e => {
+  if (!drag) return;
+  // 손가락 아래 칸 번호를 찾아 그 자리로 옮김
+  const over = document.elementFromPoint(e.clientX, strip.getBoundingClientRect().top + 20)?.closest('[data-k]');
+  if (!over || +over.dataset.k === drag.from) return;
+  const to = +over.dataset.k, curPhoto = photos[cur];
+  photos.splice(to, 0, ...photos.splice(drag.from, 1));
+  drag.from = to;
+  dragged = true;
+  cur = photos.indexOf(curPhoto);
+  drawThumbs();
+  strip.children[to].classList.add('lift');
+  $('ie-title').textContent = `사진 편집 ${cur + 1} / ${photos.length}`;
+});
+const endDrag = () => {
+  clearTimeout(holdT);
+  if (drag) { drag = null; delete strip.dataset.lock; setTimeout(() => { dragged = false; }, 0); select(cur); }
+};
+addEventListener('pointerup', endDrag);
+addEventListener('pointercancel', endDrag);
+strip.addEventListener('touchmove', e => { if (drag) e.preventDefault(); }, { passive: false }); // 끄는 동안 줄이 스크롤되지 않게
+strip.addEventListener('contextmenu', e => e.preventDefault());
 $('ie-prev').onclick = () => select(cur - 1);
 $('ie-next').onclick = () => select(cur + 1);
 
@@ -194,12 +230,11 @@ for (const t of document.querySelectorAll('#imgedit .tabs button')) {
 // 한 손가락: 위치 이동 / 두 손가락: 확대·축소 / PC 마우스 휠: 확대·축소
 const ptrs = new Map();
 let pinch = 0;
-let swipe = null; // 옆으로 밀어서 다음 사진: 손가락 하나, 사진이 더 움직일 수 없을 때만
+// (사진 위에서 밀어도 다음 사진으로 넘어가지 않음: 자르기·위치 조정과 헷갈려서 화살표·번호로만 이동)
 cv.addEventListener('pointerdown', e => {
   cv.setPointerCapture(e.pointerId);
   ptrs.set(e.pointerId, [e.clientX, e.clientY]);
   pinch = 0;
-  swipe = ptrs.size === 1 ? { x: e.clientX, y: e.clientY, ox: st.ox } : null;
 });
 cv.addEventListener('pointermove', e => {
   const p = ptrs.get(e.pointerId);
@@ -218,14 +253,7 @@ cv.addEventListener('pointermove', e => {
   }
   layout();
 });
-const up = e => {
-  ptrs.delete(e.pointerId);
-  pinch = 0;
-  if (!swipe || ptrs.size) return;
-  const dx = e.clientX - swipe.x, dy = e.clientY - swipe.y, moved = Math.abs(st.ox - swipe.ox) * cv.clientWidth;
-  if (photos.length > 1 && Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5 && moved < 10) select(cur + (dx < 0 ? 1 : -1));
-  swipe = null;
-};
+const up = e => { ptrs.delete(e.pointerId); pinch = 0; };
 cv.addEventListener('pointerup', up);
 cv.addEventListener('pointercancel', up);
 cv.addEventListener('wheel', e => {
@@ -242,7 +270,7 @@ function finish(result) {
   done(result);
 }
 $('ie-cancel').onclick = () => {
-  if (photos.length > 1 && !confirm('편집을 그만두고 사진을 올리지 않을까요?')) return;
+  if (photos.length > 1 && !ask('편집을 그만두고 사진을 올리지 않을까요?')) return;
   finish(null);
 };
 $('ie-done').onclick = async () => {

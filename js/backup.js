@@ -30,7 +30,7 @@ $('export').onclick = async () => {
 // 불러온 파일은 믿지 않고 하나하나 모양을 검사 (이상한 항목은 건너뜀)
 const isStr = (v, max) => typeof v === 'string' && v.length <= max;
 const dataUrl = (v, kinds) => typeof v === 'string' && new RegExp(`^data:(${kinds})(;[\\w=.+-]+)*;base64,[A-Za-z0-9+/=]+$`).test(v);
-const IMG = 'image/(jpeg|png|webp)', VID = 'video/(mp4|webm|quicktime)', AUD = 'audio/(mp4|webm|ogg|mpeg|aac|x-m4a)';
+const IMG = 'image/(jpeg|png|webp)', VID = 'video/(mp4|webm|quicktime)', AUD = 'audio/(mp4|webm|ogg|mpeg|aac|x-m4a|wav)';
 const httpsUrl = v => v === '' || (isStr(v, 1000) && /^https:\/\//.test(v));
 
 // 사진 편집값: 정해진 칸만, 숫자 범위 안에서
