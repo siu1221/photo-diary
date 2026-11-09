@@ -380,3 +380,8 @@ dialog::backdrop { background: #2a202466; backdrop-filter: blur(2px); }
 .ie-thumbs .num { position: absolute; left: 3px; top: 2px; min-width: 16px; height: 16px; border-radius: 8px; background: #0009; color: #fff; font: 600 .7rem/16px var(--en); text-align: center; }
 .ie-thumbs button.on .num { background: var(--acc); }
 .ie-thumbs button.lift { transform: scale(1.15); opacity: 1; box-shadow: 0 6px 14px #0008; z-index: 1; }
+
+/* 앱 확인창 */
+.ask[open] { margin: auto; width: min(86vw, 340px); background: var(--card); color: var(--ink); border-radius: 20px; padding: 22px 18px 16px; box-shadow: 0 12px 40px #0004; animation: up .2s ease; }
+.ask p { margin: 0 0 18px; text-align: center; line-height: 1.5; }
+.ask .pill { flex: 1; }

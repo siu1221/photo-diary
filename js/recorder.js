@@ -1,5 +1,5 @@
 import { $, pad, toast, openScreen, closeScreen, pickMime, cssVar, audioCtx } from './util.js';
-import { ask } from './music.js';
+import { ask, refreshPlayer } from './music.js';
 
 // 녹음은 "일시정지할 때마다 한 토막씩" 끝내서 저장하고, 끝낼 때 토막들을 이어 붙인다.
 // 이유: 아이폰은 마이크가 켜진 채로 들어 보기(재생)를 하면 이어지는 녹음이 소리 없이 저장되는 문제가 있어서,
@@ -57,7 +57,7 @@ async function startSegment() {
   } catch {
     return toast('마이크 사용을 허용해 주세요 (설정 → Safari → 마이크)');
   }
-  const actx = audioCtx();
+  const actx = new (window.AudioContext || window.webkitAudioContext)(); // 파형 전용, 토막 끝나면 닫음
   analyser = actx.createAnalyser();
   analyser.fftSize = 1024;
   buf = new Float32Array(analyser.fftSize);
@@ -70,7 +70,8 @@ async function startSegment() {
   r.stopped = new Promise(ok => {
     r.onstop = () => {
       stream.getTracks().forEach(t => t.stop()); // 마이크 완전히 끄기
-      if (navigator.audioSession) navigator.audioSession.type = 'auto'; // 소리를 다시 스피커로 크게
+      actx.close().catch(() => {});
+      if (navigator.audioSession) navigator.audioSession.type = 'playback'; // 소리를 다시 스피커로 크게
       if (!r.discarded && chunks.length) segments.push(new Blob(chunks, { type: (r.mimeType || mime || 'audio/webm').split(';')[0] }));
       ok();
     };
@@ -198,8 +199,8 @@ $('rec-main').onclick = () => {
   if (state === 'rec') pause();
 };
 $('rec-stop').onclick = stop;
-$('rec-redo').onclick = () => {
-  if (!ask('지금까지 녹음한 걸 지우고 처음부터 다시 할까요?')) return;
+$('rec-redo').onclick = async () => {
+  if (!await ask('지금까지 녹음한 걸 지우고 처음부터 다시 할까요?')) return;
   reset();
   startSegment();
 };
@@ -216,10 +217,11 @@ function close(value) {
   cancelAnimationFrame(raf);
   state = 'idle';
   closeScreen('rec');
+  refreshPlayer(); // 통화 모드에서 벗어나 노래가 원래 크기로 나오게
   done(value);
 }
-$('rec-cancel').onclick = () => {
-  if (state !== 'idle' && !ask('녹음을 저장하지 않고 나갈까요?')) return;
+$('rec-cancel').onclick = async () => {
+  if (state !== 'idle' && !await ask('녹음을 저장하지 않고 나갈까요?')) return;
   close(null);
 };
 $('rec-done').onclick = $('rec-use').onclick = () => { if (result) close(result); };

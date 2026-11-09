@@ -161,8 +161,8 @@ async function reEdit(i) {
   if (item) { day.media[i] = item; touch(); }
   renderMedia(i);
 }
-function removeMedia(i) {
-  if (!ask('이 사진(영상)을 뺄까요?')) return;
+async function removeMedia(i) {
+  if (!await ask('이 사진(영상)을 뺄까요?')) return;
   day.media.splice(i, 1);
   touch(); renderMedia(Math.max(0, Math.min(i, day.media.length - 1)));
 }
@@ -199,15 +199,15 @@ function renderVoices() {
       if (player.dataset.i === String(i) && !player.paused) { player.pause(); return; }
       player.src = blobUrl(v.blob);
       player.dataset.i = i;
-      player.play();
+      player.play().catch(() => {}); // 다른 소리 때문에 중간에 끊겨도 오류 창 안 띄움
       for (const b of $('voice-list').querySelectorAll('.play')) b.textContent = '▶';
       btn.textContent = '❚❚';
       player.ontimeupdate = () => bars.style.setProperty('--p', (player.currentTime / v.dur * 100) + '%');
       player.onpause = player.onended = () => { btn.textContent = '▶'; };
     };
     return el('li', {}, btn, bars, el('span', { className: 'small', textContent: fmtSec(v.dur) }),
-      el('button', { className: 'x', textContent: '✕', 'aria-label': '음성 삭제', onclick: () => {
-        if (!ask('이 음성을 지울까요?')) return;
+      el('button', { className: 'x', textContent: '✕', 'aria-label': '음성 삭제', onclick: async () => {
+        if (!await ask('이 음성을 지울까요?')) return;
         player.pause(); day.voices.splice(i, 1); touch(); renderVoices();
       } }));
   }));
@@ -267,12 +267,12 @@ $('day-save').onclick = async () => {
   renderCal();
   toast(hasAny(day) ? '오늘도 수고했어요 ♡' : '비어 있어서 저장하지 않았어요');
 };
-$('day-back').onclick = () => {
-  if (dirty && !ask('저장하지 않고 나갈까요?')) return;
+$('day-back').onclick = async () => {
+  if (dirty && !await ask('저장하지 않고 나갈까요?')) return;
   closeDay();
 };
 $('day-delete').onclick = async () => {
-  if (!ask('이 날의 사진, 글, 음성, 일정을 모두 지울까요?')) return;
+  if (!await ask('이 날의 사진, 글, 음성, 일정을 모두 지울까요?')) return;
   await delDay(key);
   closeDay();
   renderCal();

@@ -1,36 +1,62 @@
-import { $, el, toast, audioCtx } from './util.js';
+import { $, el, toast } from './util.js';
+export { ask } from './util.js';
 
 // 노래 찾기: Apple의 무료 iTunes 검색(키 필요 없음, 30초 미리듣기 제공) + 유튜브 링크
 // 소리는 Web Audio의 볼륨 조절기(gain)를 거쳐 나감 — 아이폰은 audio.volume을 무시해서 이 방법만 통함
-const audio = new Audio();
-audio.crossOrigin = 'anonymous'; // 미리듣기 서버가 허용해 줘서 볼륨 조절기에 연결 가능
-let gain;
+// 노래 전용 소리 엔진을 따로 둠: 녹음 뒤 아이폰이 '통화 모드'(작은 소리)를 안 풀면 엔진을 통째로 새로 만들어 스피커로 되돌림
 const SILENT = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=';
 const DEFAULT_VOL = 40;
 export const lastVol = () => { try { return +(localStorage.songVol ?? DEFAULT_VOL); } catch { return DEFAULT_VOL; } };
 const saveVol = v => { try { localStorage.songVol = v; } catch {} };
 
+let audio, mctx, gain, vol = DEFAULT_VOL;
+let want = false; // 사용자가 노래를 틀어 둔 상태인지 (아이폰이 몰래 끊었을 때 되살리는 기준)
+let pos = 0;      // 멈춘 자리 (다시 틀 때 처음으로 되감기지 않게)
+function makePlayer() {
+  const a = new Audio();
+  a.crossOrigin = 'anonymous'; // 미리듣기 서버가 허용해 줘서 볼륨 조절기에 연결 가능
+  a.addEventListener('timeupdate', () => { if (a.currentTime > 0.5) pos = a.currentTime; });
+  a.addEventListener('ended', () => { if (!a.loop) want = false; });
+  for (const ev of ['play', 'pause', 'ended']) a.addEventListener(ev, sync);
+  return a;
+}
+audio = makePlayer();
+function graph() {
+  if (!mctx) {
+    mctx = new (window.AudioContext || window.webkitAudioContext)();
+    gain = mctx.createGain();
+    mctx.createMediaElementSource(audio).connect(gain).connect(mctx.destination);
+  }
+  gain.gain.value = vol / 100;
+  if (mctx.state !== 'running') mctx.resume().catch(() => {});
+}
+// 녹음이 끝난 뒤 부름: 새 재생기·새 엔진으로 갈아끼우고 소리를 스피커로
+export function refreshPlayer() {
+  if (navigator.audioSession) navigator.audioSession.type = 'playback';
+  const old = audio, src = old.src, loop = old.loop;
+  old.pause();
+  mctx?.close().catch(() => {});
+  mctx = gain = null;
+  audio = makePlayer();
+  if (src && src !== SILENT) { audio.src = src; audio.loop = loop; }
+}
+
 // 손가락으로 누른 그 순간에 불러야, 아이폰이 잠시 뒤 자동 재생을 허락해 줌
 export function unlockAudio() {
-  const ctx = audioCtx();
-  if (!gain) {
-    gain = ctx.createGain();
-    ctx.createMediaElementSource(audio).connect(gain).connect(ctx.destination);
-  }
+  graph();
   if (audio.paused && !want) { audio.src = SILENT; audio.play().catch(() => {}); }
 }
-let want = false; // 사용자가 노래를 틀어 둔 상태인지 (아이폰이 몰래 끊었을 때 되살리는 기준)
-export function playSong(url, vol, loop = false) {
-  unlockAudio();
+export function playSong(url, v, loop = false) {
+  vol = v;
+  graph();
   want = true;
-  gain.gain.value = vol / 100;
   audio.loop = loop;
-  if (audio.src === url && !audio.paused) return; // 이미 그 노래가 나오는 중이면 그대로 이어서
+  if (audio.src === url) { if (audio.paused) resume(); return; } // 같은 노래면 멈춘 자리부터 이어서
   pos = 0;
   audio.src = url;
   audio.play().catch(() => {});
 }
-export function setVolume(v) { if (gain) gain.gain.value = v / 100; }
+export function setVolume(v) { vol = v; if (gain) gain.gain.value = v / 100; }
 export const stopSong = () => { want = false; holds = 0; audio.pause(); ytCmd('pauseVideo'); yt = null; };
 
 // --- 유튜브 재생기 조종 (멈춤·이어서). 유튜브가 알려 주는 재생 상태를 듣고, 명령을 보냄
@@ -44,10 +70,8 @@ const ytPlaying = () => !!yt && ytState === 1; // 1 = 재생 중
 
 // 녹음·영상을 트는 동안 잠시 멈췄다가(hold) 끝나면 이어서(release)
 let holds = 0, resumeAfter = false;
-let pos = 0; // 멈춘 자리 (아이폰이 다시 틀 때 처음으로 되감는 경우가 있어서 기억해 둠)
-audio.addEventListener('timeupdate', () => { if (audio.currentTime > 0.5) pos = audio.currentTime; });
 function resume() {
-  audioCtx();
+  graph();
   const at = pos;
   audio.play().then(() => { if (at > 1 && Math.abs(audio.currentTime - at) > 1.5) audio.currentTime = at; }).catch(() => {});
 }
@@ -70,27 +94,15 @@ export function release() {
 // 아이폰은 다른 소리(영상·전화·알림·화면 잠금)가 끼어들면 노래를 몰래 멈춤 → 다음 터치나 앱 복귀 때 이어서 재생
 export const revive = () => {
   if (!want || holds) return;
-  if (audio.paused) resume(); else audioCtx();
-};
-// 확인창(지울까요?)이 뜨면 아이폰이 노래를 끊음 → 창이 닫히면 이어서
-export const ask = msg => {
-  const wasYt = ytPlaying();
-  const r = confirm(msg);
-  revive();
-  if (wasYt) ytCmd('playVideo'); // 확인창 때문에 끊긴 유튜브도 이어서
-  return r;
+  if (audio.paused) resume(); else graph();
 };
 document.addEventListener('pointerdown', e => { if (!e.target.closest('.play')) revive(); }, true);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) revive(); });
-audio.addEventListener('ended', () => { if (!audio.loop) want = false; });
 
 // 화면의 ▶/❚❚ 버튼을 실제 재생 상태에 맞추기
-const sync = () => {
+function sync() {
   for (const b of document.querySelectorAll('.play[data-url]')) b.textContent = !audio.paused && audio.src === b.dataset.url ? '❚❚' : '▶';
-};
-audio.addEventListener('play', sync);
-audio.addEventListener('pause', sync);
-audio.addEventListener('ended', sync);
+}
 
 function playBtn(url, getVol, loop) {
   // 처음 표시도 지금 재생 상태대로 (이미 나오고 있는 노래면 ❚❚)

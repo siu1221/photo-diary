@@ -67,6 +67,21 @@ for (const row of document.querySelectorAll('.scroll-x')) {
   }, { passive: false });
 }
 
+// 확인창: await ask('지울까요?') → true/false
+export function ask(msg) {
+  return new Promise(res => {
+    const d = $('ask');
+    $('ask-msg').textContent = msg;
+    const done = v => { if (d.open) d.close(); res(v); };
+    $('ask-yes').onclick = () => done(true);
+    $('ask-no').onclick = () => done(false);
+    d.oncancel = e => { e.preventDefault(); done(false); };
+    d.onclick = e => { if (e.target === d) done(false); };
+    d.showModal();
+    $('ask-yes').focus();
+  });
+}
+
 // 시트(아래에서 올라오는 창) 바깥을 누르거나 × 누르면 닫기
 for (const d of document.querySelectorAll('dialog')) {
   d.addEventListener('click', e => { if (e.target === d || e.target.closest('[data-close]')) d.close(); });

@@ -302,11 +302,17 @@
   </div>
 </dialog>
 
+<!-- 앱 자체 확인창 (아이폰 기본 확인창은 노래를 끊고 소리 설정을 바꿔서 쓰지 않음) -->
+<dialog id="ask" class="ask" aria-labelledby="ask-msg">
+  <p id="ask-msg"></p>
+  <div class="row"><button id="ask-no" class="pill">취소</button><button id="ask-yes" class="pill acc">확인</button></div>
+</dialog>
+
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 <script>
   // 아이폰에서 화면이 비거나 멈출 때 원인을 보이게 (캡처해서 알려 주세요)
   addEventListener('error', e => { if (!(e instanceof ErrorEvent) && e.target?.tagName !== 'SCRIPT') return; const t = document.getElementById('toast'); t.textContent = '오류: ' + (e.message || e.target?.src || '알 수 없음'); t.classList.add('show'); }, true);
-  addEventListener('unhandledrejection', e => { const t = document.getElementById('toast'); t.textContent = '오류: ' + (e.reason?.message || e.reason); t.classList.add('show'); });
+  addEventListener('unhandledrejection', e => { if (['AbortError', 'NotAllowedError'].includes(e.reason?.name)) return; const t = document.getElementById('toast'); t.textContent = '오류: ' + (e.reason?.message || e.reason); t.classList.add('show'); });
 </script>
 <script type="module" src="js/main.js"></script>
 </body>

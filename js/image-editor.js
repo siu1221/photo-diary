@@ -269,8 +269,8 @@ function finish(result) {
   photos = [];
   done(result);
 }
-$('ie-cancel').onclick = () => {
-  if (photos.length > 1 && !ask('편집을 그만두고 사진을 올리지 않을까요?')) return;
+$('ie-cancel').onclick = async () => {
+  if (photos.length > 1 && !await ask('편집을 그만두고 사진을 올리지 않을까요?')) return;
   finish(null);
 };
 $('ie-done').onclick = async () => {
