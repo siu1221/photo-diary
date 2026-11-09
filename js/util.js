@@ -97,3 +97,6 @@ export function audioCtx() {
   if (actx.state !== 'running') actx.resume().catch(() => {}); // 기다리지 않음: 손가락 누른 순간에만 풀리는 경우가 있어서
   return actx;
 }
+
+// 아이폰에 소리 쓰는 방식 알리기 ('play-and-record' 녹음 중 / 'playback' 그냥 재생). 이 앱에만 적용되고 폰 설정은 안 바뀜
+export function setSession(type) { try { if (navigator.audioSession) navigator.audioSession.type = type; } catch { /* 지원 안 하면 무시 */ } }

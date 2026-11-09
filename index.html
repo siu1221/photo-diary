@@ -311,7 +311,7 @@
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 <script>
   // 아이폰에서 화면이 비거나 멈출 때 원인을 보이게 (캡처해서 알려 주세요)
-  addEventListener('error', e => { if (!(e instanceof ErrorEvent) && e.target?.tagName !== 'SCRIPT') return; const t = document.getElementById('toast'); t.textContent = '오류: ' + (e.message || e.target?.src || '알 수 없음'); t.classList.add('show'); }, true);
+  addEventListener('error', e => { if (!(e instanceof ErrorEvent) && e.target?.tagName !== 'SCRIPT') return; if (e.message === 'Script error.') return; /* 내용 없는 바깥(유튜브 등) 오류는 무시 */ const t = document.getElementById('toast'); t.textContent = '오류: ' + (e.message || e.target?.src || '알 수 없음'); t.classList.add('show'); }, true);
   addEventListener('unhandledrejection', e => { if (['AbortError', 'NotAllowedError'].includes(e.reason?.name)) return; const t = document.getElementById('toast'); t.textContent = '오류: ' + (e.reason?.message || e.reason); t.classList.add('show'); });
 </script>
 <script type="module" src="js/main.js"></script>

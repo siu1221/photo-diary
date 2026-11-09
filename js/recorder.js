@@ -1,4 +1,4 @@
-import { $, pad, toast, openScreen, closeScreen, pickMime, cssVar, audioCtx } from './util.js';
+import { $, pad, toast, openScreen, closeScreen, pickMime, cssVar, audioCtx, setSession } from './util.js';
 import { ask, refreshPlayer } from './music.js';
 
 // 녹음은 "일시정지할 때마다 한 토막씩" 끝내서 저장하고, 끝낼 때 토막들을 이어 붙인다.
@@ -52,7 +52,7 @@ async function startSegment() {
   try {
     // 에코 제거·잡음 제거·자동 볼륨을 끔: 켜면 아이폰이 '통화 모드'로 바뀌어
     // 녹음이 작게 되고, 다른 소리가 작아지거나 스피커폰처럼 바뀜
-    if (navigator.audioSession) navigator.audioSession.type = 'play-and-record';
+    setSession('play-and-record');
     stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
   } catch {
     return toast('마이크 사용을 허용해 주세요 (설정 → Safari → 마이크)');
@@ -71,7 +71,7 @@ async function startSegment() {
     r.onstop = () => {
       stream.getTracks().forEach(t => t.stop()); // 마이크 완전히 끄기
       actx.close().catch(() => {});
-      if (navigator.audioSession) navigator.audioSession.type = 'playback'; // 소리를 다시 스피커로 크게
+      setSession('playback'); // 소리를 다시 스피커로 크게
       if (!r.discarded && chunks.length) segments.push(new Blob(chunks, { type: (r.mimeType || mime || 'audio/webm').split(';')[0] }));
       ok();
     };
@@ -129,9 +129,9 @@ function drawWave() {
   });
 }
 
-// 토막들을 하나로: 한 토막이면 그대로, 여러 토막이면 소리를 풀어서 이어 붙인 뒤 WAV로
+// 토막들을 하나로 이어 붙이고, 목소리 크기를 알맞게 키워서(노멀라이즈) WAV로
+// (아이폰은 통화 모드를 끄면 마이크 소리가 작게 담겨서 항상 크기를 맞춤)
 async function joined() {
-  if (segments.length === 1) return segments[0];
   const ctx = audioCtx();
   const parts = await Promise.all(segments.map(async b => ctx.decodeAudioData(await b.arrayBuffer())));
   const RATE = 22050; // 목소리엔 충분, 용량은 절반
@@ -145,7 +145,16 @@ async function joined() {
     s.start(at);
     at += p.duration;
   }
-  return toWav(await off.startRendering());
+  return toWav(normalize(await off.startRendering()));
+}
+// 가장 큰 소리가 꽉 차도록 키움 (최대 10배, 잡음만 있는 녹음은 과하게 키우지 않음)
+export function normalize(ab) {
+  const d = ab.getChannelData(0);
+  let peak = 0;
+  for (const x of d) { const a = Math.abs(x); if (a > peak) peak = a; }
+  const g = peak > 0.002 ? Math.min(10, 0.8 / peak) : 1;
+  if (g > 1.05) for (let i = 0; i < d.length; i++) d[i] *= g;
+  return ab;
 }
 export function toWav(ab) {
   const data = ab.getChannelData(0), n = data.length, out = new DataView(new ArrayBuffer(44 + n * 2));

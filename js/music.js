@@ -1,4 +1,4 @@
-import { $, el, toast } from './util.js';
+import { $, el, toast, setSession } from './util.js';
 export { ask } from './util.js';
 
 // 노래 찾기: Apple의 무료 iTunes 검색(키 필요 없음, 30초 미리듣기 제공) + 유튜브 링크
@@ -32,7 +32,7 @@ function graph() {
 }
 // 녹음이 끝난 뒤 부름: 새 재생기·새 엔진으로 갈아끼우고 소리를 스피커로
 export function refreshPlayer() {
-  if (navigator.audioSession) navigator.audioSession.type = 'playback';
+  setSession('playback');
   const old = audio, src = old.src, loop = old.loop;
   old.pause();
   mctx?.close().catch(() => {});
@@ -97,7 +97,19 @@ export const revive = () => {
   if (audio.paused) resume(); else graph();
 };
 document.addEventListener('pointerdown', e => { if (!e.target.closest('.play')) revive(); }, true);
-document.addEventListener('visibilitychange', () => { if (!document.hidden) revive(); });
+// 앱을 내리면(백그라운드) 노래 멈춤, 다시 돌아오면 그 자리부터 이어서
+let bgYt = false;
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    if (want && !audio.paused) audio.pause();
+    bgYt = ytPlaying();
+    if (bgYt) ytCmd('pauseVideo');
+  } else {
+    revive();
+    if (bgYt && !holds) ytCmd('playVideo');
+    bgYt = false;
+  }
+});
 
 // 화면의 ▶/❚❚ 버튼을 실제 재생 상태에 맞추기
 function sync() {
@@ -124,7 +136,7 @@ export function songCard(s, onRemove, onChange) {
   const box = el('div', {}, row);
   if (s.kind === 'itunes' && s.preview) row.append(playBtn(s.preview, onRemove ? vol : lastVol, !!onRemove));
   if (s.kind === 'youtube') {
-    const b = el('button', { className: 'play', textContent: '▶', 'aria-label': '유튜브로 듣기' });
+    const b = el('button', { className: 'play yt-start', textContent: '▶', 'aria-label': '유튜브로 듣기' });
     b.onclick = () => {
       b.remove();
       stopSong(); // 다른 노래와 겹치지 않게

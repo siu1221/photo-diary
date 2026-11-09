@@ -30,6 +30,8 @@ export async function openDay(k) {
   // 다 쓴 일기를 다시 열면 그날 노래가 배경음악처럼 (설정에서 끌 수 있음)
   const s = day.song;
   if (existed && s?.kind === 'itunes' && s.preview && autoplayOn()) playSong(s.preview, s.vol ?? lastVol(), true);
+  // 유튜브는 바로 틀어 보기만 시도 (아이폰이 소리 있는 자동 재생을 막으면 재생 버튼이 보이는 상태로 대기)
+  if (existed && s?.kind === 'youtube' && autoplayOn()) $('song-view').querySelector('.yt-start')?.click();
 }
 export const autoplayOn = () => { try { return localStorage.autoplay !== '0'; } catch { return true; } };
 
