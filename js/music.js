@@ -31,7 +31,16 @@ export function playSong(url, vol, loop = false) {
   audio.play().catch(() => {});
 }
 export function setVolume(v) { if (gain) gain.gain.value = v / 100; }
-export const stopSong = () => { want = false; holds = 0; audio.pause(); };
+export const stopSong = () => { want = false; holds = 0; audio.pause(); ytCmd('pauseVideo'); yt = null; };
+
+// --- 유튜브 재생기 조종 (멈춤·이어서). 유튜브가 알려 주는 재생 상태를 듣고, 명령을 보냄
+let yt = null, ytState = -1, resumeYt = false;
+const ytCmd = func => yt?.contentWindow?.postMessage(JSON.stringify({ event: 'command', func, args: [] }), '*');
+addEventListener('message', e => {
+  if (!/^https:\/\/www\.youtube(-nocookie)?\.com$/.test(e.origin) || e.source !== yt?.contentWindow) return;
+  try { const d = JSON.parse(e.data); if (d.info?.playerState !== undefined) ytState = d.info.playerState; } catch {}
+});
+const ytPlaying = () => !!yt && ytState === 1; // 1 = 재생 중
 
 // 녹음·영상을 트는 동안 잠시 멈췄다가(hold) 끝나면 이어서(release)
 let holds = 0, resumeAfter = false;
@@ -43,11 +52,20 @@ function resume() {
   audio.play().then(() => { if (at > 1 && Math.abs(audio.currentTime - at) > 1.5) audio.currentTime = at; }).catch(() => {});
 }
 export function hold() {
-  if (holds++ === 0) { resumeAfter = want && !audio.paused; audio.pause(); }
+  if (holds++ === 0) {
+    resumeAfter = want && !audio.paused;
+    audio.pause();
+    resumeYt = ytPlaying();
+    if (resumeYt) ytCmd('pauseVideo');
+  }
 }
 export function release() {
   if (holds === 0) return;
-  if (--holds === 0 && resumeAfter && want) resume();
+  if (--holds === 0) {
+    if (resumeAfter && want) resume();
+    if (resumeYt) ytCmd('playVideo');
+    resumeYt = false;
+  }
 }
 // 아이폰은 다른 소리(영상·전화·알림·화면 잠금)가 끼어들면 노래를 몰래 멈춤 → 다음 터치나 앱 복귀 때 이어서 재생
 export const revive = () => {
@@ -55,7 +73,13 @@ export const revive = () => {
   if (audio.paused) resume(); else audioCtx();
 };
 // 확인창(지울까요?)이 뜨면 아이폰이 노래를 끊음 → 창이 닫히면 이어서
-export const ask = msg => { const r = confirm(msg); revive(); return r; };
+export const ask = msg => {
+  const wasYt = ytPlaying();
+  const r = confirm(msg);
+  revive();
+  if (wasYt) ytCmd('playVideo'); // 확인창 때문에 끊긴 유튜브도 이어서
+  return r;
+};
 document.addEventListener('pointerdown', e => { if (!e.target.closest('.play')) revive(); }, true);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) revive(); });
 audio.addEventListener('ended', () => { if (!audio.loop) want = false; });
@@ -91,10 +115,15 @@ export function songCard(s, onRemove, onChange) {
     const b = el('button', { className: 'play', textContent: '▶', 'aria-label': '유튜브로 듣기' });
     b.onclick = () => {
       b.remove();
-      box.append(el('iframe', {
+      stopSong(); // 다른 노래와 겹치지 않게
+      yt = el('iframe', {
         className: 'yt-frame', title: s.title, allow: 'autoplay; encrypted-media',
-        src: `https://www.youtube-nocookie.com/embed/${s.id}?autoplay=1&playsinline=1`,
-      }));
+        // enablejsapi: 앱이 멈춤·재생 명령을 보낼 수 있게
+        src: `https://www.youtube-nocookie.com/embed/${s.id}?autoplay=1&playsinline=1&enablejsapi=1&origin=${encodeURIComponent(location.origin)}`,
+      });
+      const frame = yt;
+      frame.onload = () => frame.contentWindow.postMessage(JSON.stringify({ event: 'listening', id: 1, channel: 'widget' }), '*');
+      box.append(frame);
     };
     row.append(b);
   }

@@ -50,7 +50,10 @@ function ui() {
 async function startSegment() {
   let stream;
   try {
-    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+    // 에코 제거·잡음 제거·자동 볼륨을 끔: 켜면 아이폰이 '통화 모드'로 바뀌어
+    // 녹음이 작게 되고, 다른 소리가 작아지거나 스피커폰처럼 바뀜
+    if (navigator.audioSession) navigator.audioSession.type = 'play-and-record';
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
   } catch {
     return toast('마이크 사용을 허용해 주세요 (설정 → Safari → 마이크)');
   }
@@ -67,6 +70,7 @@ async function startSegment() {
   r.stopped = new Promise(ok => {
     r.onstop = () => {
       stream.getTracks().forEach(t => t.stop()); // 마이크 완전히 끄기
+      if (navigator.audioSession) navigator.audioSession.type = 'auto'; // 소리를 다시 스피커로 크게
       if (!r.discarded && chunks.length) segments.push(new Blob(chunks, { type: (r.mimeType || mime || 'audio/webm').split(';')[0] }));
       ok();
     };
