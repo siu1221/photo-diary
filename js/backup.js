@@ -1,31 +1,27 @@
 import { $, todayKey, toast, ask } from './util.js';
-import { getRange, putDay, delDay, getMeta, setMeta, emptyDay } from './db.js';
+import { getDay, dayKeys, putDay, delDay, getMeta, setMeta, emptyDay } from './db.js';
 import { renderCal } from './calendar.js';
 
-// 백업: 모든 기록(사진·영상·음성 포함)을 JSON 파일 하나로
-// shortcut: 영상이 많으면 파일이 커지고 폰 메모리를 많이 씀, 너무 커지면 월별 백업으로 나누기
-const toDataURL = b => new Promise((ok, fail) => {
-  const r = new FileReader();
-  r.onload = () => ok(r.result);
-  r.onerror = () => fail(r.error);
-  r.readAsDataURL(b);
-});
-const toBlob = async u => (await fetch(u)).blob();
+// 백업 파일(3판): 첫 줄 "PDIARY3 <설명 길이>" → 설명(JSON, 사진 자리엔 {"$b": 번호}) → 사진·영상·음성 바이트를 그대로 이어 붙임
+// 예전(2판)처럼 사진을 글자(base64)로 바꾸면 아이폰 메모리가 넘쳐 앱이 죽어서, 바이트 그대로 담음
+const MAGIC = 'PDIARY3';
+const toBlob = async u => (u instanceof Blob ? u : (await fetch(u)).blob());
 
-// 아이폰: 큰 글자 하나로 합치면 메모리가 넘쳐 앱이 죽고, 다운로드 링크는 앱 화면을 떠나 버림
-// → 하루씩 글자로 바꿔 조각으로 이어 붙이고, 공유 시트(파일 앱에 저장)로 내보냄
 $('export').onclick = async () => {
   toast('백업 파일을 만드는 중이에요…');
-  const parts = [`{"app":"photo-diary","version":2,"myQuotes":${JSON.stringify((await getMeta('myQuotes')) || [])},"days":{`];
-  const days = await getRange();
-  for (const [k, d] of Object.entries(days)) {
-    for (const m of d.media) { m.blob = await toDataURL(m.blob); m.thumb = await toDataURL(m.thumb); if (m.orig) m.orig = await toDataURL(m.orig); }
-    for (const v of d.voices) v.blob = await toDataURL(v.blob);
-    parts.push(`${parts.length > 1 ? ',' : ''}${JSON.stringify(k)}:${JSON.stringify(d)}`);
-    delete days[k]; // 다 바꾼 날은 바로 놓아 줘서 메모리 아끼기
+  const blobs = [], ref = b => { blobs.push(b); return { $b: blobs.length - 1 }; };
+  const days = {};
+  for (const k of await dayKeys()) {
+    const d = await getDay(k);
+    for (const m of d.media) { m.blob = ref(m.blob); m.thumb = ref(m.thumb); if (m.orig) m.orig = ref(m.orig); }
+    for (const v of d.voices) v.blob = ref(v.blob);
+    days[k] = d;
   }
-  parts.push('}}');
-  const file = new File(parts, `하루한장-백업-${todayKey()}.json`, { type: 'application/json' });
+  const head = new TextEncoder().encode(JSON.stringify({
+    app: 'photo-diary', version: 3, myQuotes: (await getMeta('myQuotes')) || [], days, blobs: blobs.map(b => ({ size: b.size, type: b.type })),
+  }));
+  // 이름은 .json으로 둬야 아이폰 파일 고르기 창에서 백업 파일을 고를 수 있음
+  const file = new File([`${MAGIC} ${head.length}\n`, head, ...blobs], `하루한장-백업-${todayKey()}.json`, { type: 'application/json' });
   if (navigator.canShare?.({ files: [file] })) {
     // 오래 걸린 뒤라 폰이 '누른 직후'로 안 쳐 줄 수 있어서 한 번 더 누르게 함
     if (!await ask('백업 파일이 준비됐어요.\n「파일에 저장」을 골라 보관해 주세요.')) return;
@@ -39,10 +35,26 @@ $('export').onclick = async () => {
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 };
 
+// 3판 파일 읽기: 설명을 읽고, 바이트 부분은 파일에서 잘라 쓰기만 함 (메모리에 다 올리지 않음)
+async function readV3(f, first) {
+  const at = first.length, len = +first.slice(MAGIC.length + 1, -1);
+  const text = await f.slice(at, at + len).text();
+  const table = JSON.parse(text).blobs;
+  if (!Array.isArray(table)) throw new Error('blobs');
+  let off = at + len;
+  const blobs = table.map(({ size, type }) => {
+    if (!Number.isSafeInteger(size) || size < 0 || !isStr(type, 100) || off + size > f.size) throw new Error('blob');
+    return f.slice(off, off += size, type);
+  });
+  return JSON.parse(text, (k, v) => (v && typeof v === 'object' && Object.keys(v).join() === '$b' ? blobs[v.$b] ?? null : v));
+}
+
 // 불러온 파일은 믿지 않고 하나하나 모양을 검사 (이상한 항목은 건너뜀)
 const isStr = (v, max) => typeof v === 'string' && v.length <= max;
 const dataUrl = (v, kinds) => typeof v === 'string' && new RegExp(`^data:(${kinds})(;[\\w=.+-]+)*;base64,[A-Za-z0-9+/=]+$`).test(v);
 const IMG = 'image/(jpeg|png|webp)', VID = 'video/(mp4|webm|quicktime)', AUD = 'audio/(mp4|webm|ogg|mpeg|aac|x-m4a|wav)';
+// 사진 자리: 2판은 data: 글자, 3판은 파일에서 잘라 낸 Blob
+const media = (v, kinds) => (v instanceof Blob ? new RegExp(`^(${kinds})(;.*)?$`).test(v.type) : dataUrl(v, kinds));
 const httpsUrl = v => v === '' || (isStr(v, 1000) && /^https:\/\//.test(v));
 
 // 사진 편집값: 정해진 칸만, 숫자 범위 안에서
@@ -54,13 +66,13 @@ const pickEdit = e => ({ ratio: e.ratio, flip: e.flip, ...Object.fromEntries(Obj
 export function validDay(v) {
   if (!v || typeof v !== 'object') return false;
   // 1단계 백업 모양 { photo, text }
-  if (!('media' in v)) return isStr(v.text, 200) && (v.photo === null || dataUrl(v.photo, IMG));
+  if (!('media' in v)) return isStr(v.text, 200) && (v.photo === null || media(v.photo, IMG));
   const song = v.song;
   return isStr(v.text, 5000)
     && Array.isArray(v.media) && v.media.length <= 10
-    && v.media.every(m => (m.type === 'image' ? dataUrl(m.blob, IMG) : m.type === 'video' && dataUrl(m.blob, VID)) && dataUrl(m.thumb, IMG)
-      && (m.orig === undefined || dataUrl(m.orig, IMG)) && (m.edit === undefined || validEdit(m.edit)))
-    && Array.isArray(v.voices) && v.voices.length <= 50 && v.voices.every(x => dataUrl(x.blob, AUD) && typeof x.dur === 'number')
+    && v.media.every(m => (m.type === 'image' ? media(m.blob, IMG) : m.type === 'video' && media(m.blob, VID)) && media(m.thumb, IMG)
+      && (m.orig === undefined || media(m.orig, IMG)) && (m.edit === undefined || validEdit(m.edit)))
+    && Array.isArray(v.voices) && v.voices.length <= 50 && v.voices.every(x => media(x.blob, AUD) && typeof x.dur === 'number')
     && Array.isArray(v.plans) && v.plans.length <= 100
     && v.plans.every(p => /^(\d\d:\d\d)?$/.test(p.time) && isStr(p.text, 60) && typeof p.done === 'boolean')
     && (v.quote === null || (isStr(v.quote.text, 200) && isStr(v.quote.mood, 40)))
@@ -94,7 +106,10 @@ $('import').onchange = async e => {
   e.target.value = '';
   if (!f) return;
   let data;
-  try { data = JSON.parse(await f.text()); } catch { return toast('백업 파일이 아니에요'); }
+  try {
+    const first = (/^PDIARY3 \d{1,9}\n/.exec(await f.slice(0, 20).text()) || [])[0];
+    data = first ? await readV3(f, first) : JSON.parse(await f.text());
+  } catch { return toast('백업 파일이 아니에요'); }
   const entries = Object.entries(data?.days && typeof data.days === 'object' ? data.days : {})
     .filter(([k, v]) => /^\d{4}-\d{2}-\d{2}$/.test(k) && validDay(v));
   if (!entries.length) return toast('불러올 기록이 없어요');
@@ -104,7 +119,7 @@ $('import').onchange = async e => {
     // 백업을 다 넣은 다음에 백업에 없는 날을 지움 (중간에 실패해도 기록이 다 날아가지 않게)
     for (const [k, v] of entries) await putDay(k, await revive(v));
     const keep = new Set(entries.map(([k]) => k));
-    for (const k of Object.keys(await getRange())) if (!keep.has(k)) await delDay(k);
+    for (const k of await dayKeys()) if (!keep.has(k)) await delDay(k);
     await setMeta('myQuotes', [...new Set(Array.isArray(data.myQuotes) ? data.myQuotes.filter(q => isStr(q, 120)) : [])]);
   } catch {
     return toast('불러오는 중에 문제가 생겼어요. 저장 공간을 확인해 주세요.');

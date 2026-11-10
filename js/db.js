@@ -72,6 +72,7 @@ export async function getRange(lo, hi) {
   for (const k in raw) raw[k] = await normalize(raw[k]);
   return raw;
 }
+export const dayKeys = () => tx('days', 'readonly', s => { const o = {}; s.getAllKeys().onsuccess = e => { o.v = e.target.result; }; return o; }).then(o => o.v);
 export const getDay = async k => (await getRange(k, k))[k] || null;
 export const putDay = async (k, v) => { const p = await pack(v); return tx('days', 'readwrite', s => { s.put(p, k); }); };
 export const delDay = k => tx('days', 'readwrite', s => { s.delete(k); });

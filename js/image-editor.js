@@ -21,7 +21,7 @@ let photos = [], cur = 0, img, st, done;
 const cv = $('ie-canvas');
 
 // list: [{ src: 원본 Blob/File, edit?: 지난 편집값 }]
-export async function editImages(list) {
+export async function editImages(list, start = 0) {
   const loaded = [];
   for (const { src, edit } of list) {
     const url = URL.createObjectURL(src), im = new Image();
@@ -34,7 +34,7 @@ export async function editImages(list) {
   document.querySelector('#imgedit [data-tab="crop"]').click(); // 항상 자르기 탭(격자)부터
   openScreen('imgedit');
   drawThumbs();
-  select(0);
+  select(start);
   return new Promise(res => { done = res; });
 }
 
@@ -270,7 +270,7 @@ function finish(result) {
   done(result);
 }
 $('ie-cancel').onclick = async () => {
-  if (photos.length > 1 && !await ask('편집을 그만두고 사진을 올리지 않을까요?')) return;
+  if (photos.length > 1 && !await ask('편집을 그만둘까요?\n바꾼 내용은 저장되지 않아요.')) return;
   finish(null);
 };
 $('ie-done').onclick = async () => {

@@ -100,7 +100,7 @@ export const revive = () => {
   if (!want || holds) return;
   if (audio.paused) resume(); else graph();
 };
-document.addEventListener('pointerdown', e => { if (!e.target.closest('.play')) revive(); }, true);
+document.addEventListener('pointerdown', e => { if (!e.target.closest('.play, video')) revive(); }, true);
 // 앱을 내리면(백그라운드) 노래 멈춤, 다시 돌아오면 그 자리부터 이어서
 let bgYt = false;
 document.addEventListener('visibilitychange', () => {

@@ -57,17 +57,21 @@ function renderMedia(focus = 0) { // focus: 다 그린 뒤 보여 줄 칸 (방�
     track.firstChild.style.whiteSpace = 'pre-line';
   } else {
     track.replaceChildren(...day.media.map((m, i) => {
-      const view = m.type === 'video'
-        ? songAware(el('video', { src: blobUrl(m.blob), poster: blobUrl(m.thumb), controls: true, playsInline: true, preload: 'metadata' }))
-        : el('img', { src: blobUrl(m.blob), alt: `${i + 1}번째 사진`, decoding: 'async' });
-      const tools = el('div', { className: 'tools' });
-      // 나중에 더 올린 사진도 자리를 바꿀 수 있게 (한 칸씩 앞/뒤로)
-      if (i > 0) tools.append(el('button', { textContent: '⇠', 'aria-label': '앞으로 옮기기', onclick: () => moveMedia(i, -1) }));
-      if (i < day.media.length - 1) tools.append(el('button', { textContent: '⇢', 'aria-label': '뒤로 옮기기', onclick: () => moveMedia(i, 1) }));
-      tools.append(
+      const item = el('div', { className: 'media-item' });
+      if (m.type === 'video') {
+        // 아이폰 기본 재생 버튼은 '손가락으로 누름'으로 안 쳐서, 멈춰도 노래를 다시 못 틂
+        // → 영상을 직접 눌러 재생/멈춤 (누른 그 순간에 노래를 이어서 틀 수 있게)
+        const v = songAware(el('video', { src: blobUrl(m.blob), poster: blobUrl(m.thumb), playsInline: true, loop: true, preload: 'metadata', 'aria-label': `${i + 1}번째 영상, 눌러서 재생` }));
+        const mark = el('span', { className: 'vplay', textContent: '▶', 'aria-hidden': 'true' });
+        v.addEventListener('play', () => { mark.hidden = true; });
+        v.addEventListener('pause', () => { mark.hidden = false; });
+        v.onclick = () => { if (v.paused) v.play().catch(() => {}); else { v.pause(); v.songOff(); } };
+        item.append(v, mark);
+      } else item.append(el('img', { src: blobUrl(m.blob), alt: `${i + 1}번째 사진`, decoding: 'async' }));
+      item.append(el('div', { className: 'tools' },
         el('button', { textContent: '✎', 'aria-label': '편집', onclick: () => reEdit(i) }),
-        el('button', { textContent: '✕', 'aria-label': '삭제', onclick: () => removeMedia(i) }));
-      return el('div', { className: 'media-item' }, view, tools);
+        el('button', { textContent: '✕', 'aria-label': '삭제', onclick: () => removeMedia(i) })));
+      return item;
     }));
   }
   $('media-count').textContent = day.media.length ? `${day.media.length} / ${MAX_MEDIA}` : '';
@@ -110,6 +114,7 @@ function songAware(media) {
   media.addEventListener('pause', off);
   media.addEventListener('ended', off);
   media.addEventListener('emptied', off);
+  media.songOff = off; // 멈춤 버튼을 누른 그 순간에 바로 부르려고
   return media;
 }
 songAware(player);
@@ -161,14 +166,17 @@ $('media-input').onchange = onPick;
 
 async function reEdit(i) {
   const m = day.media[i];
-  const item = m.type === 'video' ? await withHold(() => editVideo(m.blob))
-    : (await editImages([{ src: m.orig || m.blob, edit: m.orig && m.edit }]))?.[0];
-  if (item) { day.media[i] = item; touch(); }
+  if (m.type === 'video') {
+    const item = await withHold(() => editVideo(m.blob));
+    if (item) { day.media[i] = item; touch(); }
+    return renderMedia(i);
+  }
+  // 사진은 그날 사진 전부를 편집 화면에 띄움 → 아래 줄에서 꾹 눌러 순서도 바꿀 수 있음 (영상 자리는 그대로)
+  const at = day.media.flatMap((x, j) => (x.type === 'image' ? [j] : []));
+  const items = await editImages(at.map(j => ({ src: day.media[j].orig || day.media[j].blob, edit: day.media[j].orig && day.media[j].edit })), at.indexOf(i));
+  if (items?.length === at.length) { at.forEach((j, n) => { day.media[j] = items[n]; }); touch(); }
+  else if (items) toast('열 수 없는 사진이 있어서 바꾸지 않았어요');
   renderMedia(i);
-}
-function moveMedia(i, dir) {
-  day.media.splice(i + dir, 0, ...day.media.splice(i, 1));
-  touch(); renderMedia(i + dir);
 }
 async function removeMedia(i) {
   if (!await ask('이 사진(영상)을 뺄까요?')) return;
@@ -205,7 +213,7 @@ function renderVoices() {
     const bars = el('span', { className: 'bars' });
     const btn = el('button', { className: 'play', textContent: '▶', 'aria-label': `음성 ${i + 1} 재생` });
     btn.onclick = () => {
-      if (player.dataset.i === String(i) && !player.paused) { player.pause(); return; }
+      if (player.dataset.i === String(i) && !player.paused) { player.pause(); player.songOff(); return; }
       player.src = blobUrl(v.blob);
       player.dataset.i = i;
       player.play().catch(() => {}); // 다른 소리 때문에 중간에 끊겨도 오류 창 안 띄움
