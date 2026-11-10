@@ -81,7 +81,8 @@ function resume() {
 }
 export function hold() {
   if (holds++ === 0) {
-    resumeAfter = want && !audio.paused;
+    // 아이폰은 영상이 시작되는 순간 노래를 먼저 몰래 멈춰서, '지금 나오는 중'이 아니라 '틀어 둔 상태'를 기억
+    resumeAfter = want;
     audio.pause();
     resumeYt = ytPlaying();
     if (resumeYt) ytCmd('pauseVideo');
@@ -160,6 +161,7 @@ function playBtn(url, getVol, loop) {
   b.onclick = e => {
     e.stopPropagation();
     if (audio.src === url && !audio.paused) { want = false; return audio.pause(); }
+    dispatchEvent(new Event('songstart')); // 영상·음성 메모가 나오던 중이면 멈춤 (나중에 튼 것만 나오게)
     playSong(url, getVol(), loop);
   };
   return b;
@@ -177,6 +179,7 @@ export function songCard(s, onRemove, onChange) {
     const b = el('button', { className: 'play yt-start', textContent: '▶', 'aria-label': '유튜브로 듣기' });
     b.onclick = () => {
       b.remove();
+      dispatchEvent(new Event('songstart'));
       stopSong(); // 다른 노래와 겹치지 않게
       yt = el('iframe', {
         className: 'yt-frame', title: s.title, allow: 'autoplay; encrypted-media',

@@ -59,14 +59,7 @@ function renderMedia(focus = 0) { // focus: 다 그린 뒤 보여 줄 칸 (방�
     track.replaceChildren(...day.media.map((m, i) => {
       const item = el('div', { className: 'media-item' });
       if (m.type === 'video') {
-        // 아이폰 기본 재생 버튼은 '손가락으로 누름'으로 안 쳐서, 멈춰도 노래를 다시 못 틂
-        // → 영상을 직접 눌러 재생/멈춤 (누른 그 순간에 노래를 이어서 틀 수 있게)
-        const v = songAware(el('video', { src: blobUrl(m.blob), poster: blobUrl(m.thumb), playsInline: true, loop: true, preload: 'metadata', 'aria-label': `${i + 1}번째 영상, 눌러서 재생` }));
-        const mark = el('span', { className: 'vplay', textContent: '▶', 'aria-hidden': 'true' });
-        v.addEventListener('play', () => { mark.hidden = true; });
-        v.addEventListener('pause', () => { mark.hidden = false; });
-        v.onclick = () => { if (v.paused) v.play().catch(() => {}); else { v.pause(); v.songOff(); } };
-        item.append(v, mark);
+        item.append(songAware(el('video', { src: blobUrl(m.blob), poster: blobUrl(m.thumb), controls: true, playsInline: true, preload: 'metadata' })));
       } else item.append(el('img', { src: blobUrl(m.blob), alt: `${i + 1}번째 사진`, decoding: 'async' }));
       item.append(el('div', { className: 'tools' },
         el('button', { textContent: '✎', 'aria-label': '편집', onclick: () => reEdit(i) }),
@@ -118,6 +111,30 @@ function songAware(media) {
   return media;
 }
 songAware(player);
+// 노래를 새로 틀면 나오던 영상·음성 메모는 멈춤
+addEventListener('songstart', () => { player.pause(); $('media-track').querySelectorAll('video').forEach(v => v.pause()); });
+
+// 화면 왼쪽 끝에서 오른쪽으로 밀면 뒤로 (아이폰 홈 화면 앱에는 기본 '밀어서 뒤로'가 없음)
+{
+  const s = $('day');
+  let x0 = null, dx = 0;
+  s.addEventListener('touchstart', e => { const t = e.touches[0]; x0 = e.touches.length === 1 && t.clientX < 30 ? t.clientX : null; dx = 0; }, { passive: true });
+  s.addEventListener('touchmove', e => {
+    if (x0 === null) return;
+    dx = Math.max(0, e.touches[0].clientX - x0);
+    s.style.transform = `translateX(${dx}px)`;
+  }, { passive: true });
+  const end = () => {
+    if (x0 === null) return;
+    x0 = null;
+    s.style.transition = 'transform .2s';
+    s.style.transform = '';
+    setTimeout(() => { s.style.transition = ''; }, 200);
+    if (dx > 80) $('day-back').click(); // 안 저장한 게 있으면 확인창이 뜸
+  };
+  s.addEventListener('touchend', end);
+  s.addEventListener('touchcancel', end);
+}
 
 // 여러 장일 때: 반투명 화살표 + PC에서는 마우스로 끌어서 넘기기 (폰은 손가락으로 밀면 넘어감)
 function drawArrows() {
@@ -171,10 +188,9 @@ async function reEdit(i) {
     if (item) { day.media[i] = item; touch(); }
     return renderMedia(i);
   }
-  // 사진은 그날 사진 전부를 편집 화면에 띄움 → 아래 줄에서 꾹 눌러 순서도 바꿀 수 있음 (영상 자리는 그대로)
-  const at = day.media.flatMap((x, j) => (x.type === 'image' ? [j] : []));
-  const items = await editImages(at.map(j => ({ src: day.media[j].orig || day.media[j].blob, edit: day.media[j].orig && day.media[j].edit })), at.indexOf(i));
-  if (items?.length === at.length) { at.forEach((j, n) => { day.media[j] = items[n]; }); touch(); }
+  // 그날 사진·영상 전부를 편집 화면에 띄움 → 아래 줄에서 꾹 눌러 순서 바꾸기 (영상은 순서만)
+  const items = await editImages(day.media.map(x => (x.type === 'video' ? { src: x.thumb, keep: x } : { src: x.orig || x.blob, edit: x.orig && x.edit })), i);
+  if (items?.length === day.media.length) { day.media = items; touch(); }
   else if (items) toast('열 수 없는 사진이 있어서 바꾸지 않았어요');
   renderMedia(i);
 }

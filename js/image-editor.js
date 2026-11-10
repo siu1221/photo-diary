@@ -23,11 +23,11 @@ const cv = $('ie-canvas');
 // list: [{ src: 원본 Blob/File, edit?: 지난 편집값 }]
 export async function editImages(list, start = 0) {
   const loaded = [];
-  for (const { src, edit } of list) {
+  for (const { src, edit, keep } of list) {
     const url = URL.createObjectURL(src), im = new Image();
     im.src = url;
     try { await im.decode(); } catch { URL.revokeObjectURL(url); toast('열 수 없는 사진은 건너뛰었어요'); continue; }
-    loaded.push({ img: im, url, src, isFile: !edit, st: { ...blank(), ...edit } });
+    loaded.push({ img: im, url, src, keep, isFile: !edit, st: { ...blank(), ...edit } }); // keep: 영상(순서만 바꾸고 그대로 돌려줌)
   }
   if (!loaded.length) return null;
   photos = loaded;
@@ -41,6 +41,7 @@ export async function editImages(list, start = 0) {
 function select(i) {
   cur = Math.max(0, Math.min(photos.length - 1, i));
   ({ img, st } = photos[cur]);
+  $('imgedit').classList.toggle('keep', !!photos[cur].keep);
   $('ie-title').textContent = photos.length > 1 ? `사진 편집 ${cur + 1} / ${photos.length}` : '사진 편집';
   $('ie-prev').hidden = cur === 0;
   $('ie-next').hidden = cur === photos.length - 1;
@@ -54,7 +55,7 @@ function drawThumbs() {
   $('ie-thumbs').hidden = photos.length < 2;
   $('ie-thumbs').replaceChildren(...photos.map((p, k) =>
     el('button', { 'aria-label': `${k + 1}번째 사진. 꾹 눌러 끌면 순서 바꾸기`, 'data-k': k, onclick: () => { if (!dragged) select(k); } },
-      el('img', { src: p.url, alt: '', draggable: false }), el('span', { className: 'num', textContent: k + 1 }))));
+      el('img', { src: p.url, alt: '', draggable: false }), el('span', { className: 'num', textContent: p.keep ? `${k + 1} ▶` : k + 1 }))));
   [...$('ie-thumbs').children].forEach((b, k) => b.classList.toggle('on', k === cur));
 }
 let drag = null, dragged = false, holdT, holdX = 0;
@@ -232,6 +233,7 @@ const ptrs = new Map();
 let pinch = 0;
 // (사진 위에서 밀어도 다음 사진으로 넘어가지 않음: 자르기·위치 조정과 헷갈려서 화살표·번호로만 이동)
 cv.addEventListener('pointerdown', e => {
+  if (photos[cur]?.keep) return; // 영상 칸은 편집 안 함
   cv.setPointerCapture(e.pointerId);
   ptrs.set(e.pointerId, [e.clientX, e.clientY]);
   pinch = 0;
@@ -281,6 +283,7 @@ $('ie-done').onclick = async () => {
     const items = [];
     for (let k = 0; k < photos.length; k++) {
       if (photos.length > 1) toast(`등록하는 중… ${k + 1} / ${photos.length}`);
+      if (photos[k].keep) { items.push(photos[k].keep); continue; }
       ({ img, st } = photos[k]);
       clamp();
       const R = frameRatio(), out = el('canvas');
