@@ -203,6 +203,10 @@ function drawGrid(c, dpr, X = 0, Y = 0, W = c.width, H = c.height) {
     ctx.moveTo(0, H * f); ctx.lineTo(W, H * f);
   }
   ctx.stroke();
+  // 어디까지 잘리는지 보이게 틀 테두리
+  ctx.lineWidth = 1.5 * dpr;
+  ctx.strokeStyle = '#fff';
+  ctx.strokeRect(0.75 * dpr, 0.75 * dpr, W - 1.5 * dpr, H - 1.5 * dpr);
   // 네 모서리 굵은 꺾쇠
   ctx.lineWidth = 3 * dpr;
   ctx.strokeStyle = '#fff';
@@ -225,24 +229,54 @@ function layout() {
     const stage = $('ie-stage'), R = free ? rw / rh : frameRatio();
     const cssW = Math.min(stage.clientWidth - 20, (stage.clientHeight - 20) * R);
     const dpr = Math.min(2, devicePixelRatio || 1);
-    if (free) {
-      // 사진 전체를 보여 주고 그 위에 자를 틀: 틀 밖은 어둡게
-      const keep = st, r = toRect();
-      st = { ...st, ratio: 'orig', zoom: 1, ox: 0, oy: 0 };
-      draw(cv, Math.max(50, Math.round(cssW * dpr)));
-      st = keep;
-      const W = cv.width, H = cv.height, ctx = cv.getContext('2d');
-      ctx.fillStyle = '#000a';
-      ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.rect(r.x * W, r.y * H, r.w * W, r.h * H); ctx.fill('evenodd');
-      drawGrid(cv, dpr, r.x * W, r.y * H, r.w * W, r.h * H);
-    } else {
-      draw(cv, Math.max(50, Math.round(cssW * dpr)));
-      if (tab === 'crop') drawGrid(cv, dpr);
-    }
+    if (free) { drawFree(stage.clientWidth - 20, stage.clientHeight - 20, dpr); return; }
+    draw(cv, Math.max(50, Math.round(cssW * dpr)));
+    if (tab === 'crop') drawGrid(cv, dpr);
     cv.style.width = cssW + 'px';
+    cv.style.height = '';
   });
 }
 addEventListener('resize', () => { if ($('imgedit').classList.contains('active')) layout(); });
+
+// 자유 자르기 화면: 자를 부분이 화면을 채우게 확대해 보여 주고, 둘레는 어둡게 (아이폰 사진 앱처럼)
+// view = 화면(CSS px)에 사진을 놓는 방법 { p: 사진 1px당 화면 px, x, y: 사진 왼쪽 위 }. 끄는 동안엔 고정, 손 떼면 새 틀로 부드럽게 확대
+let view = null, anim = null, full = { key: '' };
+const fitView = (r, CW, CH) => {
+  const [rw, rh] = dims(), m = 24, p = Math.min((CW - 2 * m) / (r.w * rw), (CH - 2 * m) / (r.h * rh));
+  return { p, x: CW / 2 - (r.x + r.w / 2) * rw * p, y: CH / 2 - (r.y + r.h / 2) * rh * p };
+};
+function fullImage() { // 보정·필터까지 들어간 사진 전체 (값이 바뀔 때만 다시 계산)
+  const key = [img.src, st.rot, st.flip, st.b, st.c, st.s, st.w, st.filter].join();
+  if (full.key !== key) {
+    const [rw, rh] = dims(), keep = st, c = el('canvas');
+    st = { ...st, ratio: 'orig', zoom: 1, ox: 0, oy: 0 };
+    draw(c, Math.round(rw * Math.min(1, 2048 / Math.max(rw, rh))));
+    st = keep;
+    full = { key, c };
+  }
+  return full.c;
+}
+function drawFree(CW, CH, dpr) {
+  const [rw, rh] = dims(), r = toRect(), tgt = fitView(r, CW, CH);
+  if (!grab) {
+    if (anim) {
+      const t = Math.min(1, (performance.now() - anim.t0) / 250), e = 1 - (1 - t) ** 3, f = anim.from;
+      view = { p: f.p + (tgt.p - f.p) * e, x: f.x + (tgt.x - f.x) * e, y: f.y + (tgt.y - f.y) * e };
+      if (t < 1) layout(); else anim = null;
+    } else view = tgt;
+  }
+  cv.width = Math.round(CW * dpr); cv.height = Math.round(CH * dpr);
+  cv.style.width = CW + 'px'; cv.style.height = CH + 'px';
+  const ctx = cv.getContext('2d'), { p, x, y } = view;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(fullImage(), x, y, rw * p, rh * p);
+  const X = x + r.x * rw * p, Y = y + r.y * rh * p, W = r.w * rw * p, H = r.h * rh * p;
+  ctx.fillStyle = '#000b';
+  ctx.beginPath(); ctx.rect(0, 0, CW, CH); ctx.rect(X, Y, W, H); ctx.fill('evenodd');
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  drawGrid(cv, dpr, X * dpr, Y * dpr, W * dpr, H * dpr);
+}
 
 function syncUI() {
   for (const b of $('ie-ratios').children) b.classList.toggle('on', b.dataset.ratio === st.ratio);
@@ -299,17 +333,20 @@ cv.addEventListener('pointerdown', e => {
 // 자유 자르기: 틀의 변·모서리를 잡으면 그 변만 움직이고, 틀 안을 잡으면 틀째 옮김
 let grab = null;
 function grabCrop(e) {
-  const b = cv.getBoundingClientRect(), r = toRect();
-  const px = (e.clientX - b.left) / b.width, py = (e.clientY - b.top) / b.height, tx = 28 / b.width, ty = 28 / b.height;
+  const b = cv.getBoundingClientRect(), r = toRect(), [rw, rh] = dims();
+  if (!view) return;
+  anim = null; // 확대되는 중에 잡으면 그 자리에서 멈춤
+  const sx = rw * view.p, sy = rh * view.p; // 사진 전체 폭·높이(화면 px)
+  const px = (e.clientX - b.left - view.x) / sx, py = (e.clientY - b.top - view.y) / sy, tx = 28 / sx, ty = 28 / sy;
   const inX = px > r.x - tx && px < r.x + r.w + tx, inY = py > r.y - ty && py < r.y + r.h + ty;
   let ed = '';
   if (inY && Math.abs(px - r.x) < tx) ed += 'l'; else if (inY && Math.abs(px - r.x - r.w) < tx) ed += 'r';
   if (inX && Math.abs(py - r.y) < ty) ed += 't'; else if (inX && Math.abs(py - r.y - r.h) < ty) ed += 'b';
   if (!ed && inX && inY) ed = 'm';
-  grab = ed && { ed, r, x0: e.clientX, y0: e.clientY, b };
+  grab = ed && { ed, r, x0: e.clientX, y0: e.clientY, sx, sy };
 }
 function moveCrop(e) {
-  const { ed, r, b } = grab, dx = (e.clientX - grab.x0) / b.width, dy = (e.clientY - grab.y0) / b.height, n = { ...r };
+  const { ed, r, sx, sy } = grab, dx = (e.clientX - grab.x0) / sx, dy = (e.clientY - grab.y0) / sy, n = { ...r };
   const lim = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
   if (ed === 'm') { n.x = lim(r.x + dx, 0, 1 - r.w); n.y = lim(r.y + dy, 0, 1 - r.h); }
   if (ed.includes('l')) { n.x = lim(r.x + dx, 0, r.x + r.w - MIN_CROP); n.w = r.x + r.w - n.x; }
@@ -337,7 +374,10 @@ cv.addEventListener('pointermove', e => {
   }
   layout();
 });
-const up = e => { ptrs.delete(e.pointerId); pinch = 0; grab = null; };
+const up = e => {
+  ptrs.delete(e.pointerId); pinch = 0;
+  if (grab) { grab = null; anim = { from: { ...view }, t0: performance.now() }; layout(); } // 손 떼면 자를 부분으로 확대
+};
 cv.addEventListener('pointerup', up);
 cv.addEventListener('pointercancel', up);
 cv.addEventListener('wheel', e => {
