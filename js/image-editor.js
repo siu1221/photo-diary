@@ -111,7 +111,28 @@ $('ie-next').onclick = () => select(cur + 1);
 
 // 회전까지 반영한 사진 크기와 자르는 틀의 비율
 const dims = () => (st.rot % 180 ? [img.naturalHeight, img.naturalWidth] : [img.naturalWidth, img.naturalHeight]);
-const frameRatio = () => { const [rw, rh] = dims(); return RATIOS[st.ratio] ?? rw / rh; };
+const frameRatio = () => { const [rw, rh] = dims(); return RATIOS[st.ratio] ?? (st.ratio === 'free' ? st.fr : rw / rh); };
+const freeMode = () => st.ratio === 'free' && tab === 'crop';
+
+// 자유 자르기: 사진 위 사각형(x,y,w,h = 사진 대비 0~1) ↔ 원래 쓰던 값(틀 비율 fr, zoom, ox, oy)
+// 그래서 저장·다시 편집·다른 탭 미리보기는 고치지 않고 그대로 씀
+const MIN_CROP = 0.2; // zoom 최대 5배와 맞춤
+function toRect() {
+  const [rw, rh] = dims(), R = frameRatio(), cover = Math.max(1 / rw, 1 / R / rh) * st.zoom;
+  const w = 1 / (rw * cover), h = 1 / R / (rh * cover);
+  return { x: 0.5 - st.ox / (rw * cover) - w / 2, y: 0.5 - st.oy / (rh * cover) - h / 2, w, h };
+}
+function fromRect(r) {
+  const [rw, rh] = dims();
+  st.fr = (r.w * rw) / (r.h * rh);
+  st.zoom = 1 / Math.max(r.w, r.h);
+  const cover = Math.max(1 / rw, 1 / st.fr / rh) * st.zoom;
+  st.ox = (0.5 - (r.x + r.w / 2)) * rw * cover;
+  st.oy = (0.5 - (r.y + r.h / 2)) * rh * cover;
+}
+console.assert((() => { const s0 = st; img = { naturalWidth: 400, naturalHeight: 300 }; st = { ...blank(), ratio: 'free', fr: 4 / 3 };
+  const r = { x: 0.1, y: 0.3, w: 0.5, h: 0.4 }; fromRect(r); const q = toRect(); st = s0; img = undefined;
+  return ['x', 'y', 'w', 'h'].every(k => Math.abs(q[k] - r[k]) < 1e-9); })(), 'free crop rect round trip');
 
 // 틀 밖으로 빈 곳이 보이지 않게 위치 제한 (틀 너비 = 1 기준)
 function clamp() {
@@ -168,9 +189,10 @@ export function adjust(ctx, W, H, { b, c, s, w, gray, sepia, fade }) {
 // 미리보기: 화면 크기에 맞춰 다시 그리기
 let queued = false, tab = 'crop';
 // 아이폰 사진 앱처럼 3×3 격자 (미리보기에만, 저장되는 사진엔 안 들어감)
-function drawGrid(c, dpr) {
-  const ctx = c.getContext('2d'), W = c.width, H = c.height;
+function drawGrid(c, dpr, X = 0, Y = 0, W = c.width, H = c.height) {
+  const ctx = c.getContext('2d');
   ctx.save();
+  ctx.translate(X, Y);
   ctx.strokeStyle = '#ffffffb3';
   ctx.lineWidth = dpr;
   ctx.shadowColor = '#0006';
@@ -199,11 +221,24 @@ function layout() {
   requestAnimationFrame(() => {
     queued = false;
     clamp();
-    const stage = $('ie-stage'), R = frameRatio();
+    const free = freeMode(), [rw, rh] = dims();
+    const stage = $('ie-stage'), R = free ? rw / rh : frameRatio();
     const cssW = Math.min(stage.clientWidth - 20, (stage.clientHeight - 20) * R);
     const dpr = Math.min(2, devicePixelRatio || 1);
-    draw(cv, Math.max(50, Math.round(cssW * dpr)));
-    if (tab === 'crop') drawGrid(cv, dpr);
+    if (free) {
+      // 사진 전체를 보여 주고 그 위에 자를 틀: 틀 밖은 어둡게
+      const keep = st, r = toRect();
+      st = { ...st, ratio: 'orig', zoom: 1, ox: 0, oy: 0 };
+      draw(cv, Math.max(50, Math.round(cssW * dpr)));
+      st = keep;
+      const W = cv.width, H = cv.height, ctx = cv.getContext('2d');
+      ctx.fillStyle = '#000a';
+      ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.rect(r.x * W, r.y * H, r.w * W, r.h * H); ctx.fill('evenodd');
+      drawGrid(cv, dpr, r.x * W, r.y * H, r.w * W, r.h * H);
+    } else {
+      draw(cv, Math.max(50, Math.round(cssW * dpr)));
+      if (tab === 'crop') drawGrid(cv, dpr);
+    }
     cv.style.width = cssW + 'px';
   });
 }
@@ -214,6 +249,7 @@ function syncUI() {
   for (const i of document.querySelectorAll('#imgedit [data-k]')) i.value = st[i.dataset.k];
   showPct();
   $('ie-zoom').value = st.zoom;
+  $('ie-zoom').closest('label').hidden = st.ratio === 'free'; // 자유는 틀 크기로 확대
   [...$('ie-filters').children].forEach((b, i) => b.classList.toggle('on', i === st.filter));
 }
 
@@ -223,6 +259,7 @@ $('ie-ratios').onclick = e => {
   const r = e.target.dataset.ratio;
   if (!r) return;
   Object.assign(st, { ratio: r, zoom: 1, ox: 0, oy: 0 });
+  if (r === 'free') { const [rw, rh] = dims(); st.fr = rw / rh; } // 처음엔 사진 전체
   syncUI(); layout();
 };
 $('ie-zoom').oninput = e => { st.zoom = +e.target.value; layout(); };
@@ -232,7 +269,11 @@ function showPct() {
   for (const o of document.querySelectorAll('#imgedit [data-o]')) { const v = st[o.dataset.o]; o.textContent = (v > 0 ? '+' : '') + v + '%'; }
 }
 $('ie-adj-reset').onclick = () => { Object.assign(st, { b: 0, c: 0, s: 0, w: 0 }); syncUI(); layout(); };
-$('ie-rotate').onclick = () => { Object.assign(st, { rot: (st.rot + 270) % 360, zoom: 1, ox: 0, oy: 0 }); syncUI(); layout(); };
+$('ie-rotate').onclick = () => {
+  Object.assign(st, { rot: (st.rot + 270) % 360, zoom: 1, ox: 0, oy: 0 });
+  if (st.ratio === 'free') { const [rw, rh] = dims(); st.fr = rw / rh; }
+  syncUI(); layout();
+};
 $('ie-flip').onclick = () => { st.flip = !st.flip; layout(); };
 $('ie-reset').onclick = () => { Object.assign(st, blank()); syncUI(); layout(); };
 for (const t of document.querySelectorAll('#imgedit .tabs button')) {
@@ -251,10 +292,35 @@ let pinch = 0;
 cv.addEventListener('pointerdown', e => {
   if (photos[cur]?.keep) return; // 영상 칸은 편집 안 함
   cv.setPointerCapture(e.pointerId);
+  if (freeMode()) { grabCrop(e); return; }
   ptrs.set(e.pointerId, [e.clientX, e.clientY]);
   pinch = 0;
 });
+// 자유 자르기: 틀의 변·모서리를 잡으면 그 변만 움직이고, 틀 안을 잡으면 틀째 옮김
+let grab = null;
+function grabCrop(e) {
+  const b = cv.getBoundingClientRect(), r = toRect();
+  const px = (e.clientX - b.left) / b.width, py = (e.clientY - b.top) / b.height, tx = 28 / b.width, ty = 28 / b.height;
+  const inX = px > r.x - tx && px < r.x + r.w + tx, inY = py > r.y - ty && py < r.y + r.h + ty;
+  let ed = '';
+  if (inY && Math.abs(px - r.x) < tx) ed += 'l'; else if (inY && Math.abs(px - r.x - r.w) < tx) ed += 'r';
+  if (inX && Math.abs(py - r.y) < ty) ed += 't'; else if (inX && Math.abs(py - r.y - r.h) < ty) ed += 'b';
+  if (!ed && inX && inY) ed = 'm';
+  grab = ed && { ed, r, x0: e.clientX, y0: e.clientY, b };
+}
+function moveCrop(e) {
+  const { ed, r, b } = grab, dx = (e.clientX - grab.x0) / b.width, dy = (e.clientY - grab.y0) / b.height, n = { ...r };
+  const lim = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+  if (ed === 'm') { n.x = lim(r.x + dx, 0, 1 - r.w); n.y = lim(r.y + dy, 0, 1 - r.h); }
+  if (ed.includes('l')) { n.x = lim(r.x + dx, 0, r.x + r.w - MIN_CROP); n.w = r.x + r.w - n.x; }
+  if (ed.includes('r')) n.w = lim(r.w + dx, MIN_CROP, 1 - r.x);
+  if (ed.includes('t')) { n.y = lim(r.y + dy, 0, r.y + r.h - MIN_CROP); n.h = r.y + r.h - n.y; }
+  if (ed.includes('b')) n.h = lim(r.h + dy, MIN_CROP, 1 - r.y);
+  fromRect(n);
+  layout();
+}
 cv.addEventListener('pointermove', e => {
+  if (grab) { moveCrop(e); return; }
   const p = ptrs.get(e.pointerId);
   if (!p) return;
   const w = cv.clientWidth;
@@ -271,11 +337,12 @@ cv.addEventListener('pointermove', e => {
   }
   layout();
 });
-const up = e => { ptrs.delete(e.pointerId); pinch = 0; };
+const up = e => { ptrs.delete(e.pointerId); pinch = 0; grab = null; };
 cv.addEventListener('pointerup', up);
 cv.addEventListener('pointercancel', up);
 cv.addEventListener('wheel', e => {
   e.preventDefault();
+  if (freeMode()) return;
   st.zoom = Math.min(5, Math.max(1, st.zoom * Math.exp(-e.deltaY * 0.001)));
   $('ie-zoom').value = st.zoom;
   layout();

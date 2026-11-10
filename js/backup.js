@@ -59,9 +59,10 @@ const httpsUrl = v => v === '' || (isStr(v, 1000) && /^https:\/\//.test(v));
 
 // 사진 편집값: 정해진 칸만, 숫자 범위 안에서
 const EDIT_NUM = { rot: [0, 270], zoom: [1, 5], ox: [-50, 50], oy: [-50, 50], b: [-100, 100], c: [-100, 100], s: [-100, 100], w: [-100, 100], filter: [0, 20] };
-const validEdit = e => !!e && typeof e === 'object' && ['orig', '1:1', '4:5', '3:4', '16:9'].includes(e.ratio) && typeof e.flip === 'boolean'
+const validEdit = e => !!e && typeof e === 'object' && ['orig', 'free', '1:1', '4:5', '3:4', '16:9'].includes(e.ratio) && typeof e.flip === 'boolean'
+  && (e.fr === undefined || (typeof e.fr === 'number' && e.fr >= 0.05 && e.fr <= 20))
   && Object.entries(EDIT_NUM).every(([k, [lo, hi]]) => typeof e[k] === 'number' && e[k] >= lo && e[k] <= hi);
-const pickEdit = e => ({ ratio: e.ratio, flip: e.flip, ...Object.fromEntries(Object.keys(EDIT_NUM).map(k => [k, e[k]])) });
+const pickEdit = e => ({ ratio: e.ratio, flip: e.flip, ...(e.fr !== undefined ? { fr: e.fr } : {}), ...Object.fromEntries(Object.keys(EDIT_NUM).map(k => [k, e[k]])) });
 
 export function validDay(v) {
   if (!v || typeof v !== 'object') return false;
