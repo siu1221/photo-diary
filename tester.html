@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>하루 한 장 테스터 안내</title>
+<style>
+  :root { --bg: #fff8f4; --card: #fff; --ink: #4b3b40; --soft: #a8959b; --line: #f3e5e1; --acc: #f06d90; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #1d1b20; --card: #2a2730; --ink: #ece6ea; --soft: #9b929a; --line: #3b3640; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; padding: 16px 16px 60px; }
+  main { max-width: 560px; margin: 0 auto; }
+  h1 { font-size: 1.3rem; color: var(--acc); margin: 8px 0 4px; }
+  .sub { color: var(--soft); font-size: .9rem; margin: 0 0 16px; line-height: 1.5; }
+  h2 { font-size: 1rem; margin: 24px 0 8px; }
+  .card { background: var(--card); border-radius: 14px; padding: 14px 16px; margin-bottom: 8px; box-shadow: 0 2px 8px #0000000a; line-height: 1.6; font-size: .95rem; }
+  .card ol, .card ul { margin: 0; padding-left: 20px; }
+  .card li + li { margin-top: 4px; }
+  b { color: var(--acc); }
+  .go { display: block; text-align: center; padding: 14px; border-radius: 14px; background: var(--acc); color: #fff; text-decoration: none; font-size: 1rem; }
+  textarea { width: 100%; min-height: 140px; border: 1.5px solid var(--line); border-radius: 12px; padding: 10px; font: inherit; font-size: 16px; background: var(--card); color: var(--ink); }
+  button { width: 100%; margin-top: 8px; padding: 14px; border-radius: 14px; border: 0; background: var(--acc); color: #fff; font-size: 1rem; }
+  .note { color: var(--soft); font-size: .85rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>📖 하루 한 장 테스터 안내</h1>
+  <p class="sub">사진 한 장으로 하루를 남기는 일기 앱이에요. 써 보면서 이상한 점이나 불편한 점을 알려 주세요!</p>
+
+  <h2>1. 앱 설치하기 (갤럭시)</h2>
+  <div class="card">
+    <ol>
+      <li>아래 <b>앱 열기</b> 버튼을 눌러요 (<b>삼성 인터넷</b>이나 <b>크롬</b>에서 열어 주세요. 카톡 안 브라우저 말고요!)</li>
+      <li><b>크롬</b>: 오른쪽 위 <b>⋮</b> → <b>홈 화면에 추가</b> 또는 <b>앱 설치</b> → 설치</li>
+      <li><b>삼성 인터넷</b>: 아래 <b>≡</b> → <b>현재 페이지 추가</b> → <b>홈 화면</b> (주소창에 ⬇ 설치 아이콘이 보이면 그걸 눌러도 돼요)</li>
+      <li>홈 화면에 생긴 <b>하루 한 장</b> 아이콘으로 열면 앱처럼 쓸 수 있어요</li>
+    </ol>
+  </div>
+  <a class="go" href="./">앱 열기</a>
+  <p class="note">카톡에서 링크를 눌렀다면 오른쪽 아래(또는 위) <b>⋮ → 다른 브라우저로 열기</b>를 먼저 눌러 주세요.</p>
+
+  <h2>2. 이것저것 써 보기</h2>
+  <div class="card">
+    <ul>
+      <li>달력에서 날짜를 눌러 사진·영상 올리기 (여러 장, 편집·순서 바꾸기)</li>
+      <li>노래 고르기 (애플 미리듣기 / 유튜브 링크), 음성 녹음, 일정, 오늘의 한 마디</li>
+      <li>저장한 날을 다시 열었을 때 노래가 나오는지</li>
+      <li>⋯ 메뉴의 백업 파일 만들기 / 불러오기</li>
+      <li>화면 왼쪽 끝을 오른쪽으로 밀어서 뒤로 가기</li>
+    </ul>
+  </div>
+
+  <h2>3. 알려 주기</h2>
+  <div class="card">
+    <p class="note" style="margin-top:0">이상했던 점을 적고 <b>복사하기</b>를 눌러 카톡으로 보내 주세요. (어디서, 뭘 눌렀더니, 어떻게 됐는지)</p>
+    <textarea id="memo" placeholder="예) 영상 올리고 저장했는데 다시 열면 안 나와요"></textarea>
+    <button id="copy">복사하기</button>
+  </div>
+  <p class="note">※ 기록은 이 폰 안에만 저장돼요 (서버로 보내지 않아요). 앱을 지우거나 브라우저 데이터를 지우면 기록도 사라지니, 중요한 건 백업 파일로 보관해 주세요.</p>
+</main>
+<script>
+  const memo = document.getElementById('memo'), btn = document.getElementById('copy');
+  try { memo.value = localStorage.getItem('pd-tester-memo') || ''; } catch {}
+  memo.oninput = () => { try { localStorage.setItem('pd-tester-memo', memo.value); } catch {} };
+  btn.onclick = async () => {
+    const text = `[하루 한 장 테스트 - 갤럭시 ${navigator.userAgent.match(/Android [\d.]+/)?.[0] || ''}]\n${memo.value.trim()}`;
+    try { await navigator.clipboard.writeText(text); } catch { memo.select(); document.execCommand('copy'); }
+    btn.textContent = '복사했어요! 카톡에 붙여 넣어 주세요';
+    setTimeout(() => { btn.textContent = '복사하기'; }, 2500);
+  };
+</script>
+</body>
+</html>
