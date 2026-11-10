@@ -168,7 +168,8 @@ dialog::backdrop { background: #2a202466; backdrop-filter: blur(2px); }
 .media-card { padding: 10px; }
 .media-track { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; border-radius: 14px; scrollbar-width: none; }
 .media-track::-webkit-scrollbar { display: none; }
-.media-item { position: relative; flex: 0 0 100%; scroll-snap-align: center; aspect-ratio: 4 / 5; background: #000; }
+.media-item { position: relative; flex: 0 0 100%; scroll-snap-align: center; aspect-ratio: var(--ar, 4 / 5); background: #000; overflow: hidden; }
+.media-item img.bg { object-fit: cover; filter: blur(18px) brightness(.85); transform: scale(1.15); }
 /* 칸 안에 꽉 맞춰 넣기: 세로로 긴 영상도 아래가 잘리지 않게 (아이폰 Safari는 % 높이를 무시해서 절대 위치로) */
 .media-item img, .media-item video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
 .media-item .tools { position: absolute; top: 8px; right: 8px; display: flex; gap: 6px; }
@@ -199,11 +200,12 @@ dialog::backdrop { background: #2a202466; backdrop-filter: blur(2px); }
 }
 .letter-head { display: flex; justify-content: space-between; align-items: center; padding-left: 26px; }
 .letter .mic { background: var(--acc-l); color: var(--acc-d); }
-#diary {
+#diary, #diary-m {
   display: block; width: 100%; min-height: 224px; border: 0; resize: none; outline: none; background:
     repeating-linear-gradient(transparent 0, transparent 31px, var(--line) 31px, var(--line) 32px) local;
   line-height: 32px; font-size: 16px; padding: 0 4px 0 30px; font-family: var(--body);
 }
+#diary-m { position: absolute; visibility: hidden; height: 0; min-height: 0; overflow: hidden; pointer-events: none; }
 .voice-list { list-style: none; padding: 0 0 0 26px; margin: 10px 0 0; display: grid; gap: 8px; }
 .voice-list li { display: flex; align-items: center; gap: 10px; background: var(--acc-l); border-radius: 999px; padding: 4px 8px 4px 4px; }
 .voice-list .play { width: 34px; height: 34px; border-radius: 50%; background: var(--card); color: var(--acc-d); }

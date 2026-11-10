@@ -50,6 +50,7 @@ function renderAll() { renderMedia(); renderSong(); renderVoices(); renderPlans(
 // --- 사진·영상 (인스타 게시물처럼 옆으로 넘기기)
 function renderMedia(focus = 0) { // focus: 다 그린 뒤 보여 줄 칸 (방금 올리거나 고친 사진)
   const track = $('media-track');
+  track.style.removeProperty('--ar'); // 첫 칸 사진 비율로 다시 맞춤 (기본 4:5)
   if (!day.media.length) {
     track.replaceChildren(el('label', { className: 'media-empty' },
       '오늘을 담은 사진이나 영상을 올려 보세요\n(여러 장, 최대 10개 · 영상은 1분까지)',
@@ -57,10 +58,18 @@ function renderMedia(focus = 0) { // focus: 다 그린 뒤 보여 줄 칸 (방�
     track.firstChild.style.whiteSpace = 'pre-line';
   } else {
     track.replaceChildren(...day.media.map((m, i) => {
-      const item = el('div', { className: 'media-item' });
+      // 칸 비율과 안 맞는 사진은 검은 띠 대신 같은 사진을 흐리게 깔아 채움
+      const item = el('div', { className: 'media-item' }, el('img', { className: 'bg', src: blobUrl(m.thumb), alt: '' }));
+      const fit = (w, h) => { if (i === 0 && w && h) track.style.setProperty('--ar', Math.min(1.91, Math.max(0.75, w / h))); };
       if (m.type === 'video') {
-        item.append(songAware(el('video', { src: blobUrl(m.blob), poster: blobUrl(m.thumb), controls: true, playsInline: true, preload: 'metadata' })));
-      } else item.append(el('img', { src: blobUrl(m.blob), alt: `${i + 1}번째 사진`, decoding: 'async' }));
+        const v = songAware(el('video', { src: blobUrl(m.blob), poster: blobUrl(m.thumb), controls: true, playsInline: true, preload: 'metadata' }));
+        v.onloadedmetadata = () => fit(v.videoWidth, v.videoHeight);
+        item.append(v);
+      } else {
+        const img = el('img', { src: blobUrl(m.blob), alt: `${i + 1}번째 사진`, decoding: 'async' });
+        img.onload = () => fit(img.naturalWidth, img.naturalHeight);
+        item.append(img);
+      }
       item.append(el('div', { className: 'tools' },
         el('button', { textContent: '✎', 'aria-label': '편집', onclick: () => reEdit(i) }),
         el('button', { textContent: '✕', 'aria-label': '삭제', onclick: () => removeMedia(i) })));
@@ -216,12 +225,27 @@ async function chooseSong() {
 }
 
 // --- 일기 + 음성 메모
+// 글 높이는 숨은 복사본으로 잼: 칸을 'auto'로 줄였다 늘리면 화면이 위로 튀어서
+const meas = Object.assign($('diary').cloneNode(), { id: 'diary-m', tabIndex: -1, placeholder: '' });
+meas.setAttribute('aria-hidden', 'true');
+$('diary').after(meas);
+const textH = s => { meas.style.width = $('diary').offsetWidth + 'px'; meas.value = s; return meas.scrollHeight; };
 function autoGrow() {
   const t = $('diary');
-  t.style.height = 'auto';
-  t.style.height = Math.max(224, t.scrollHeight) + 'px';
+  t.style.height = Math.max(224, textH(t.value)) + 'px';
 }
-$('diary').addEventListener('input', () => { touch(); autoGrow(); });
+// 아이폰은 칸이 길어질 때 쓰는 줄을 키보드·윗줄 밑에 둔 채로 둬서, 직접 보이는 곳까지 굴림
+function showCaret() {
+  const t = $('diary');
+  if (document.activeElement !== t) return;
+  const box = t.closest('.scroll'), r = box.getBoundingClientRect(), vv = window.visualViewport;
+  const y = t.getBoundingClientRect().top + textH(t.value.slice(0, t.selectionEnd)); // 쓰는 줄의 아래끝
+  const top = Math.max(r.top, vv ? vv.offsetTop : 0) + 8, bottom = Math.min(r.bottom, vv ? vv.offsetTop + vv.height : innerHeight) - 24;
+  if (y > bottom) box.scrollTop += y - bottom;
+  else if (y - 32 < top) box.scrollTop -= top - (y - 32);
+}
+$('diary').addEventListener('input', () => { touch(); autoGrow(); requestAnimationFrame(showCaret); });
+window.visualViewport?.addEventListener('resize', () => setTimeout(showCaret, 50)); // 키보드가 올라온 뒤
 $('open-rec').onclick = async () => {
   hold(); // 녹음하는 동안 노래 잠시 멈춤
   const v = await recordVoice();
