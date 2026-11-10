@@ -17,11 +17,13 @@ const blank = () => ({ ratio: 'orig', rot: 0, flip: false, zoom: 1, ox: 0, oy: 0
 // 여러 장을 한 번에 편집: 옆으로 넘기며 각각 고치고, ✓ 한 번에 모두 등록
 // 사진마다 원본(orig)과 편집값(edit)을 같이 저장해서, 다시 편집해도 보정이 겹쳐 쌓이지 않음
 const ORIG_LONG = 2048; // 다시 편집용 원본 긴 변
-let photos = [], cur = 0, img, st, done;
+let photos = [], cur = 0, img, st, done, trimVideo;
 const cv = $('ie-canvas');
 
 // list: [{ src: 원본 Blob/File, edit?: 지난 편집값 }]
-export async function editImages(list, start = 0) {
+// trim: 영상 칸에서 '영상 자르기'를 누르면 부를 함수 (영상 Blob → 새 영상 항목)
+export async function editImages(list, start = 0, trim) {
+  trimVideo = trim;
   const loaded = [];
   for (const { src, edit, keep } of list) {
     const url = URL.createObjectURL(src), im = new Image();
@@ -38,11 +40,25 @@ export async function editImages(list, start = 0) {
   return new Promise(res => { done = res; });
 }
 
+const setTitle = () => { $('ie-title').textContent = `${photos[cur].keep ? '영상' : '사진'} 편집${photos.length > 1 ? ` ${cur + 1} / ${photos.length}` : ''}`; };
+$('ie-vtrim').onclick = async () => {
+  const p = photos[cur], item = await trimVideo?.(p.keep.blob);
+  if (!item) return;
+  p.keep = item;
+  URL.revokeObjectURL(p.url);
+  p.url = URL.createObjectURL(item.thumb);
+  p.img = new Image();
+  p.img.src = p.url;
+  await p.img.decode().catch(() => {});
+  drawThumbs();
+  select(cur);
+};
+
 function select(i) {
   cur = Math.max(0, Math.min(photos.length - 1, i));
   ({ img, st } = photos[cur]);
   $('imgedit').classList.toggle('keep', !!photos[cur].keep);
-  $('ie-title').textContent = photos.length > 1 ? `사진 편집 ${cur + 1} / ${photos.length}` : '사진 편집';
+  setTitle();
   $('ie-prev').hidden = cur === 0;
   $('ie-next').hidden = cur === photos.length - 1;
   [...$('ie-thumbs').children].forEach((b, k) => b.classList.toggle('on', k === cur));
@@ -80,7 +96,7 @@ strip.addEventListener('pointermove', e => {
   cur = photos.indexOf(curPhoto);
   drawThumbs();
   strip.children[to].classList.add('lift');
-  $('ie-title').textContent = `사진 편집 ${cur + 1} / ${photos.length}`;
+  setTitle();
 });
 const endDrag = () => {
   clearTimeout(holdT);

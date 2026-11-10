@@ -102,7 +102,11 @@ function pauseHidden() {
 // 영상·음성 메모를 트는 동안 배경 노래는 잠시 멈췄다가, 끝나면 이어서
 function songAware(media) {
   let held = false;
-  media.addEventListener('play', () => { if (!held) { held = true; hold(); } });
+  media.addEventListener('play', () => {
+    if (!held) { held = true; hold(); }
+    // 영상·음성 메모도 나중에 튼 것 하나만 나오게
+    [player, ...$('media-track').querySelectorAll('video')].forEach(x => { if (x !== media && !x.paused) x.pause(); });
+  });
   const off = () => { if (held) { held = false; release(); } };
   media.addEventListener('pause', off);
   media.addEventListener('ended', off);
@@ -124,13 +128,18 @@ addEventListener('songstart', () => { player.pause(); $('media-track').querySele
     dx = Math.max(0, e.touches[0].clientX - x0);
     s.style.transform = `translateX(${dx}px)`;
   }, { passive: true });
+  const slideTo = (x, then) => {
+    s.style.transition = 'transform .28s cubic-bezier(.2, .8, .2, 1)';
+    s.style.transform = x ? `translateX(${x}px)` : '';
+    setTimeout(() => { s.style.transition = ''; then?.(); }, 280);
+  };
   const end = () => {
     if (x0 === null) return;
     x0 = null;
-    s.style.transition = 'transform .2s';
-    s.style.transform = '';
-    setTimeout(() => { s.style.transition = ''; }, 200);
-    if (dx > 80) $('day-back').click(); // 안 저장한 게 있으면 확인창이 뜸
+    if (dx <= 80) return slideTo(0);
+    // 저장 안 한 게 없으면 끝까지 밀려 나가며 닫힘, 있으면 제자리로 돌아와 확인창
+    if (!dirty) slideTo(innerWidth, () => { closeDay(); s.style.transform = ''; });
+    else slideTo(0, () => $('day-back').click());
   };
   s.addEventListener('touchend', end);
   s.addEventListener('touchcancel', end);
@@ -182,14 +191,9 @@ async function onPick(e) {
 $('media-input').onchange = onPick;
 
 async function reEdit(i) {
-  const m = day.media[i];
-  if (m.type === 'video') {
-    const item = await withHold(() => editVideo(m.blob));
-    if (item) { day.media[i] = item; touch(); }
-    return renderMedia(i);
-  }
-  // 그날 사진·영상 전부를 편집 화면에 띄움 → 아래 줄에서 꾹 눌러 순서 바꾸기 (영상은 순서만)
-  const items = await editImages(day.media.map(x => (x.type === 'video' ? { src: x.thumb, keep: x } : { src: x.orig || x.blob, edit: x.orig && x.edit })), i);
+  // 그날 사진·영상 전부를 한 편집 화면에 띄움 → 아래 줄에서 꾹 눌러 순서 바꾸기, 영상 칸에선 영상 자르기
+  const items = await editImages(day.media.map(x => (x.type === 'video' ? { src: x.thumb, keep: x } : { src: x.orig || x.blob, edit: x.orig && x.edit })), i,
+    blob => withHold(() => editVideo(blob)));
   if (items?.length === day.media.length) { day.media = items; touch(); }
   else if (items) toast('열 수 없는 사진이 있어서 바꾸지 않았어요');
   renderMedia(i);

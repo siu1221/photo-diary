@@ -235,7 +235,10 @@ dialog::backdrop { background: #2a202466; backdrop-filter: blur(2px); }
 .danger-link { display: block; margin: 16px auto 0; color: #c9677b; font-size: .85rem; text-decoration: underline; }
 
 /* 사진 편집 */
-#imgedit.keep .tabs, #imgedit.keep .ie-panel { visibility: hidden; } /* 영상 칸: 순서만 */
+/* 영상 칸: 사진 편집 대신 영상 자르기 버튼 */
+#imgedit.keep .tabs, #imgedit.keep .ie-panel { display: none !important; }
+.ie-vpanel { display: none; padding: 14px 18px 22px; gap: 10px; justify-items: center; text-align: center; min-height: 150px; align-content: start; }
+#imgedit.keep .ie-vpanel { display: grid; }
 .ie-stage { flex: 1; display: grid; place-items: center; min-height: 0; padding: 10px; }
 #ie-canvas { touch-action: none; max-width: 100%; max-height: 100%; box-shadow: 0 0 0 1px #fff5; cursor: grab; }
 .tabs { display: flex; justify-content: center; gap: 28px; padding: 10px 0 6px; }
@@ -395,3 +398,5 @@ dialog::backdrop { background: #2a202466; backdrop-filter: blur(2px); }
 .yt-range .pill { padding: 6px 12px; }
 .card .chips button { background: var(--card); border-color: var(--line); color: var(--ink); }
 .card .chips button.on { background: var(--acc); border-color: var(--acc); color: #fff; }
+
+#day { box-shadow: -10px 0 30px #0000002a; } /* 밀어서 뒤로 갈 때 아래 달력과 경계가 보이게 */
