@@ -118,11 +118,12 @@ button:disabled { opacity: .35; cursor: default; }
   display: block; width: calc(100% - 28px) !important; margin: 12px auto 0; padding: 12px 16px; border-radius: 16px;
   background: linear-gradient(90deg, var(--lav), var(--sky)); text-align: left; font: 1rem var(--ko);
 }
-.week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin-top: 16px; text-align: center; font: 500 .8rem var(--en); color: var(--soft); }
+.week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; margin-top: 16px; text-align: center; font: 500 .8rem var(--en); color: var(--soft); }
 .week .sun { color: var(--sun); } .week .sat { color: var(--sat); }
-.grid { display: grid; grid-template-columns: repeat(7, 1fr); grid-auto-rows: 90px; gap: 4px; padding-top: 6px; padding-bottom: 14px; touch-action: pan-y; }
+#cal > .grid, #cal > .week { padding-inline: 2px; } /* 칸을 넓혀 사진을 크게 */
+.grid { display: grid; grid-template-columns: repeat(7, 1fr); grid-auto-rows: 90px; gap: 2px; padding-top: 6px; padding-bottom: 14px; touch-action: pan-y; }
 .cell {
-  position: relative; min-height: 0; border-radius: 12px; background: var(--card) center / cover no-repeat;
+  position: relative; min-height: 0; border-radius: 8px; background: var(--card) center / cover no-repeat;
   box-shadow: var(--shadow); overflow: hidden; text-align: left;
 }
 .cell .num { position: absolute; top: 5px; left: 6px; font: 500 .85rem var(--en); }
@@ -348,6 +349,7 @@ dialog::backdrop { background: #2a202466; backdrop-filter: blur(2px); }
 .mem-card img { width: 84px; height: 105px; object-fit: cover; border-radius: 12px; flex: none; }
 .mem-card .ph { width: 84px; height: 105px; border-radius: 12px; flex: none; display: grid; place-items: center; background: var(--acc-l); color: var(--acc-d); font-size: 1.6rem; }
 .mem-card .body { flex: 1; min-width: 0; }
+.mem-card .ask-mem { font: 600 .95rem var(--ko); margin-bottom: 2px; }
 .mem-card .when { font: .85rem var(--ko); color: var(--acc-d); }
 .mem-card .txt { margin: 4px 0 0; font-size: .9rem; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .mem-head { display: flex; justify-content: space-between; align-items: center; margin: 4px 2px 8px; }
@@ -383,7 +385,7 @@ dialog::backdrop { background: #2a202466; backdrop-filter: blur(2px); }
 
 /* 앱 확인창 */
 .ask[open] { margin: auto; width: min(86vw, 340px); background: var(--card); color: var(--ink); border-radius: 20px; padding: 22px 18px 16px; box-shadow: 0 12px 40px #0004; animation: up .2s ease; }
-.ask p { margin: 0 0 18px; text-align: center; line-height: 1.5; }
+.ask p { margin: 0 0 18px; text-align: center; line-height: 1.5; white-space: pre-line; }
 .ask .pill { flex: 1; }
 /* 유튜브 시작 위치 */
 .yt-start-pick { margin-top: 10px; display: grid; gap: 8px; }

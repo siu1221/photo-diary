@@ -1,5 +1,5 @@
-import { $, todayKey, toast } from './util.js';
-import { getRange, putDay, getMeta, setMeta, emptyDay } from './db.js';
+import { $, todayKey, toast, ask } from './util.js';
+import { getRange, putDay, delDay, getMeta, setMeta, emptyDay } from './db.js';
 import { renderCal } from './calendar.js';
 
 // 백업: 모든 기록(사진·영상·음성 포함)을 JSON 파일 하나로
@@ -12,17 +12,29 @@ const toDataURL = b => new Promise((ok, fail) => {
 });
 const toBlob = async u => (await fetch(u)).blob();
 
+// 아이폰: 큰 글자 하나로 합치면 메모리가 넘쳐 앱이 죽고, 다운로드 링크는 앱 화면을 떠나 버림
+// → 하루씩 글자로 바꿔 조각으로 이어 붙이고, 공유 시트(파일 앱에 저장)로 내보냄
 $('export').onclick = async () => {
   toast('백업 파일을 만드는 중이에요…');
+  const parts = [`{"app":"photo-diary","version":2,"myQuotes":${JSON.stringify((await getMeta('myQuotes')) || [])},"days":{`];
   const days = await getRange();
-  for (const d of Object.values(days)) {
+  for (const [k, d] of Object.entries(days)) {
     for (const m of d.media) { m.blob = await toDataURL(m.blob); m.thumb = await toDataURL(m.thumb); if (m.orig) m.orig = await toDataURL(m.orig); }
     for (const v of d.voices) v.blob = await toDataURL(v.blob);
+    parts.push(`${parts.length > 1 ? ',' : ''}${JSON.stringify(k)}:${JSON.stringify(d)}`);
+    delete days[k]; // 다 바꾼 날은 바로 놓아 줘서 메모리 아끼기
   }
-  const file = new Blob([JSON.stringify({ app: 'photo-diary', version: 2, days, myQuotes: (await getMeta('myQuotes')) || [] })], { type: 'application/json' });
+  parts.push('}}');
+  const file = new File(parts, `하루한장-백업-${todayKey()}.json`, { type: 'application/json' });
+  if (navigator.canShare?.({ files: [file] })) {
+    // 오래 걸린 뒤라 폰이 '누른 직후'로 안 쳐 줄 수 있어서 한 번 더 누르게 함
+    if (!await ask('백업 파일이 준비됐어요.\n「파일에 저장」을 골라 보관해 주세요.')) return;
+    try { await navigator.share({ files: [file] }); } catch (err) { if (err.name !== 'AbortError') toast('저장하지 못했어요. 다시 눌러 주세요.'); }
+    return;
+  }
   const a = document.createElement('a');
   a.href = URL.createObjectURL(file);
-  a.download = `하루한장-백업-${todayKey()}.json`;
+  a.download = file.name;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 };
@@ -86,11 +98,14 @@ $('import').onchange = async e => {
   const entries = Object.entries(data?.days && typeof data.days === 'object' ? data.days : {})
     .filter(([k, v]) => /^\d{4}-\d{2}-\d{2}$/.test(k) && validDay(v));
   if (!entries.length) return toast('불러올 기록이 없어요');
-  if (!confirm(`${entries.length}일치 기록을 불러올까요? 같은 날짜는 백업 내용으로 바뀌어요.`)) return;
+  if (!await ask(`지금 기록을 모두 백업 파일(${entries.length}일치) 내용으로 바꿀까요?
+백업에 없는 날의 기록은 지워져요.`)) return;
   try {
+    // 백업을 다 넣은 다음에 백업에 없는 날을 지움 (중간에 실패해도 기록이 다 날아가지 않게)
     for (const [k, v] of entries) await putDay(k, await revive(v));
-    const mine = Array.isArray(data.myQuotes) ? data.myQuotes.filter(q => isStr(q, 120)) : [];
-    if (mine.length) setMeta('myQuotes', [...new Set([...((await getMeta('myQuotes')) || []), ...mine])]);
+    const keep = new Set(entries.map(([k]) => k));
+    for (const k of Object.keys(await getRange())) if (!keep.has(k)) await delDay(k);
+    await setMeta('myQuotes', [...new Set(Array.isArray(data.myQuotes) ? data.myQuotes.filter(q => isStr(q, 120)) : [])]);
   } catch {
     return toast('불러오는 중에 문제가 생겼어요. 저장 공간을 확인해 주세요.');
   }

@@ -61,6 +61,9 @@ function renderMedia(focus = 0) { // focus: 다 그린 뒤 보여 줄 칸 (방�
         ? songAware(el('video', { src: blobUrl(m.blob), poster: blobUrl(m.thumb), controls: true, playsInline: true, preload: 'metadata' }))
         : el('img', { src: blobUrl(m.blob), alt: `${i + 1}번째 사진`, decoding: 'async' });
       const tools = el('div', { className: 'tools' });
+      // 나중에 더 올린 사진도 자리를 바꿀 수 있게 (한 칸씩 앞/뒤로)
+      if (i > 0) tools.append(el('button', { textContent: '⇠', 'aria-label': '앞으로 옮기기', onclick: () => moveMedia(i, -1) }));
+      if (i < day.media.length - 1) tools.append(el('button', { textContent: '⇢', 'aria-label': '뒤로 옮기기', onclick: () => moveMedia(i, 1) }));
       tools.append(
         el('button', { textContent: '✎', 'aria-label': '편집', onclick: () => reEdit(i) }),
         el('button', { textContent: '✕', 'aria-label': '삭제', onclick: () => removeMedia(i) }));
@@ -163,6 +166,10 @@ async function reEdit(i) {
   if (item) { day.media[i] = item; touch(); }
   renderMedia(i);
 }
+function moveMedia(i, dir) {
+  day.media.splice(i + dir, 0, ...day.media.splice(i, 1));
+  touch(); renderMedia(i + dir);
+}
 async function removeMedia(i) {
   if (!await ask('이 사진(영상)을 뺄까요?')) return;
   day.media.splice(i, 1);
@@ -254,6 +261,7 @@ $('quote-pick').onclick = async () => {
 // --- 저장 / 나가기 / 지우기
 $('day-save').onclick = async () => {
   day.text = $('diary').value;
+  const first = !day.writtenAt; // 처음 저장할 때만 "수고했어요"
   try {
     if (!hasAny(day)) { if (existed) await delDay(key); }
     else {
@@ -267,7 +275,7 @@ $('day-save').onclick = async () => {
   }
   closeDay();
   renderCal();
-  toast(hasAny(day) ? '오늘도 수고했어요 ♡' : '비어 있어서 저장하지 않았어요');
+  toast(!hasAny(day) ? '비어 있어서 저장하지 않았어요' : first ? '오늘도 수고했어요 ♡' : '저장되었어요');
 };
 $('day-back').onclick = async () => {
   if (dirty && !await ask('저장하지 않고 나갈까요?')) return;
