@@ -1,0 +1,64 @@
+# 맥이 없어서 GitHub의 맥에서 아이폰 앱(.ipa, 서명 없음)을 만든다. 서명은 PC의 Sideloadly가 내 애플 계정으로 한다.
+name: iOS 앱 만들기
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 앱에 넣을 화면 파일 모으기
+        run: |
+          mkdir www
+          cp -R index.html style.css manifest.json sw.js icon-*.png js www/
+
+      - name: 앱 껍데기(Capacitor) 만들기
+        run: |
+          npm init -y >/dev/null
+          npm i @capacitor/core@7 @capacitor/cli@7 @capacitor/ios@7
+          cat > capacitor.config.json <<'EOF'
+          { "appId": "com.siu1221.haruhanjang", "appName": "하루 한 장", "webDir": "www",
+            "backgroundColor": "#f6f1ea" }
+          EOF
+          npx cap add ios
+          npx cap sync ios
+
+      - name: 아이콘·권한 문구 넣기
+        run: |
+          sips -z 1024 1024 icon-512.png --out ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png
+          P=ios/App/App/Info.plist
+          set_key() { /usr/libexec/PlistBuddy -c "Delete :$1" "$P" 2>/dev/null || true; /usr/libexec/PlistBuddy -c "Add :$1 string $2" "$P"; }
+          set_key CFBundleDisplayName "하루 한 장"
+          set_key NSMicrophoneUsageDescription "음성 메모를 녹음하려면 마이크가 필요해요."
+          set_key NSCameraUsageDescription "일기에 넣을 사진·영상을 찍으려면 카메라가 필요해요."
+          set_key NSPhotoLibraryUsageDescription "일기에 넣을 사진·영상을 고르려면 사진 접근이 필요해요."
+          set_key NSPhotoLibraryAddUsageDescription "추억 영상·백업을 사진에 저장하려면 필요해요."
+
+      - name: 빌드 (서명 없이)
+        run: |
+          xcodebuild -workspace ios/App/App.xcworkspace -scheme App -configuration Release \
+            -sdk iphoneos -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" | tail -n 30
+          mkdir Payload
+          cp -R build/Build/Products/Release-iphoneos/App.app Payload/
+          zip -qr haruhanjang.ipa Payload
+          ls -lh haruhanjang.ipa
+
+      - name: 다운로드 페이지(Release)에 올리기
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete ios-latest -y --cleanup-tag || true
+          gh release create ios-latest haruhanjang.ipa --title "아이폰 앱 (최신)" \
+            --notes "Sideloadly로 설치하세요. 커밋 ${GITHUB_SHA::7}"
