@@ -72,7 +72,8 @@ export function validDay(v) {
   return isStr(v.text, 5000)
     && Array.isArray(v.media) && v.media.length <= 10
     && v.media.every(m => (m.type === 'image' ? media(m.blob, IMG) : m.type === 'video' && media(m.blob, VID)) && media(m.thumb, IMG)
-      && (m.orig === undefined || media(m.orig, IMG)) && (m.edit === undefined || validEdit(m.edit)))
+      && (m.orig === undefined || media(m.orig, IMG)) && (m.edit === undefined || validEdit(m.edit))
+      && (m.pos === undefined || (typeof m.pos === 'number' && m.pos >= 0 && m.pos <= 100)))
     && Array.isArray(v.voices) && v.voices.length <= 50 && v.voices.every(x => media(x.blob, AUD) && typeof x.dur === 'number')
     && Array.isArray(v.plans) && v.plans.length <= 100
     && v.plans.every(p => /^(\d\d:\d\d)?$/.test(p.time) && isStr(p.text, 60) && typeof p.done === 'boolean')
@@ -95,6 +96,7 @@ async function revive(v) {
   d.media = await Promise.all(v.media.map(async m => ({
     type: m.type, blob: await toBlob(m.blob), thumb: await toBlob(m.thumb),
     ...(m.orig ? { orig: await toBlob(m.orig), edit: m.edit && pickEdit(m.edit) } : {}),
+    ...(m.pos !== undefined ? { pos: m.pos } : {}),
   })));
   d.voices = await Promise.all(v.voices.map(async x => ({ blob: await toBlob(x.blob), dur: x.dur })));
   if (v.song) d.song = { kind: v.song.kind, title: v.song.title, artist: v.song.artist, art: v.song.art, preview: v.song.preview ?? '', ...(v.song.id ? { id: v.song.id } : {}), ...(v.song.vol !== undefined ? { vol: v.song.vol } : {}), ...(v.song.start ? { start: v.song.start } : {}) };
@@ -135,3 +137,5 @@ console.assert(validDay({ photo: null, text: 'hi' }), 'v1 backup');
 console.assert(validDay({ ...emptyDay(), text: 'hi', writtenAt: null }), 'v2 backup');
 console.assert(!validDay({ ...emptyDay(), media: [{ type: 'image', blob: 'data:image/svg+xml;base64,AA', thumb: '' }] }), 'svg rejected');
 console.assert(!validDay({ ...emptyDay(), song: { kind: 'itunes', title: 'a', artist: 'b', art: 'javascript:alert(1)' } }), 'bad url rejected');
+{ const vid = p => ({ ...emptyDay(), media: [{ type: 'video', blob: 'data:video/mp4;base64,AA', thumb: 'data:image/jpeg;base64,AA', pos: p }] });
+  console.assert(validDay(vid(30)) && !validDay(vid(500)) && !validDay(vid('top')), 'video pos checked'); }

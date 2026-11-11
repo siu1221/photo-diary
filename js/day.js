@@ -64,13 +64,20 @@ function renderMedia(focus = 0) { // focus: 다 그린 뒤 보여 줄 칸 (방�
       if (m.type === 'video') {
         const v = songAware(el('video', { src: blobUrl(m.blob), poster: blobUrl(m.thumb), controls: true, playsInline: true, preload: 'metadata' }));
         v.onloadedmetadata = () => fit(v.videoWidth, v.videoHeight);
-        item.append(v);
+        // 칸을 꽉 채우느라 잘리는 위아래 중 어디를 보일지 (0 = 맨 위, 100 = 맨 아래)
+        const show = () => { v.style.objectPosition = `50% ${m.pos ?? 50}%`; };
+        const pos = el('input', { type: 'range', className: 'pos', min: 0, max: 100, value: m.pos ?? 50, hidden: true, 'aria-label': '영상에서 보일 위치 (위·아래)',
+          oninput: () => { m.pos = +pos.value; show(); touch(); }, onpointerdown: e => e.stopPropagation() });
+        show();
+        item.append(v, pos);
+        item.togglePos = () => { pos.hidden = !pos.hidden; };
       } else {
         const img = el('img', { src: blobUrl(m.blob), alt: `${i + 1}번째 사진`, decoding: 'async' });
         img.onload = () => fit(img.naturalWidth, img.naturalHeight);
         item.append(img);
       }
       item.append(el('div', { className: 'tools' },
+        ...(item.togglePos ? [el('button', { textContent: '↕', 'aria-label': '보일 위치 조절', onclick: item.togglePos })] : []),
         el('button', { textContent: '✎', 'aria-label': '편집', onclick: () => reEdit(i) }),
         el('button', { textContent: '✕', 'aria-label': '삭제', onclick: () => removeMedia(i) })));
       return item;
