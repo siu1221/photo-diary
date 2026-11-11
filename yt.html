@@ -1,0 +1,25 @@
+<!doctype html>
+<!-- 아이폰 앱(capacitor:// 주소) 안에서는 유튜브가 출처를 몰라 재생을 거절함(오류 153).
+     그래서 앱은 이 https 페이지를 거쳐 유튜브를 틀고, 멈춤·재생 메시지는 그대로 주고받게 중계한다. -->
+<html lang="ko"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<title>유튜브</title>
+<style>html, body, iframe { margin: 0; width: 100%; height: 100%; border: 0; background: #000; }</style>
+</head><body>
+<iframe id="f" allow="autoplay; encrypted-media" title="유튜브"></iframe>
+<script>
+  const q = new URLSearchParams(location.search), f = document.getElementById('f');
+  const id = q.get('id'), start = parseInt(q.get('start'), 10) || 0;
+  if (/^[\w-]{11}$/.test(id || '')) {
+    f.src = `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&playsinline=1&enablejsapi=1&start=${start}&origin=${encodeURIComponent(location.origin)}`;
+    // 바깥 앱의 '듣기 시작' 신호가 유튜브보다 먼저 올 수 있어서 유튜브가 뜨면 직접 보냄
+    f.onload = () => f.contentWindow.postMessage(JSON.stringify({ event: 'listening', id: 1, channel: 'widget' }), '*');
+  }
+  addEventListener('message', e => {
+    if (e.source === f.contentWindow) parent.postMessage(e.data, '*');
+    else if (e.source === parent) f.contentWindow?.postMessage(e.data, '*');
+  });
+</script>
+</body></html>

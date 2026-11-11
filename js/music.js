@@ -63,7 +63,7 @@ export const stopSong = () => { want = false; holds = 0; audio.pause(); ytCmd('p
 let yt = null, ytState = -1, ytTime = 0, resumeYt = false;
 const ytCmd = func => yt?.contentWindow?.postMessage(JSON.stringify({ event: 'command', func, args: [] }), '*');
 addEventListener('message', e => {
-  if (!/^https:\/\/www\.youtube(-nocookie)?\.com$/.test(e.origin) || e.source !== yt?.contentWindow) return;
+  if (!/^https:\/\/(www\.youtube(-nocookie)?\.com|siu1221\.github\.io)$/.test(e.origin) || e.source !== yt?.contentWindow) return;
   try {
     const d = JSON.parse(e.data);
     if (d.info?.playerState !== undefined) ytState = d.info.playerState;
@@ -184,7 +184,9 @@ export function songCard(s, onRemove, onChange) {
       yt = el('iframe', {
         className: 'yt-frame', title: s.title, allow: 'autoplay; encrypted-media',
         // enablejsapi: 앱이 멈춤·재생 명령을 보낼 수 있게
-        src: `https://www.youtube-nocookie.com/embed/${s.id}?autoplay=1&playsinline=1&enablejsapi=1&start=${s.start || 0}&origin=${encodeURIComponent(location.origin)}`,
+        src: location.protocol === 'capacitor:' // 아이폰 앱: 유튜브가 출처를 몰라 거절해서 우리 사이트의 중계 페이지를 거침
+          ? `https://siu1221.github.io/photo-diary/yt.html?id=${s.id}&start=${s.start || 0}`
+          : `https://www.youtube-nocookie.com/embed/${s.id}?autoplay=1&playsinline=1&enablejsapi=1&start=${s.start || 0}&origin=${encodeURIComponent(location.origin)}`,
       });
       const frame = yt;
       frame.onload = () => frame.contentWindow.postMessage(JSON.stringify({ event: 'listening', id: 1, channel: 'widget' }), '*');
